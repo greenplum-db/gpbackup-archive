@@ -236,7 +236,7 @@ incremental backup set:
 			operating.System.Chmod = func(name string, mode os.FileMode) error {
 				return nil
 			}
-
+			gplog.SetErrorCode(0)
 		})
 		AfterEach(func() {
 			gplog.SetErrorCode(0)
