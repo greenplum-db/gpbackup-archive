@@ -585,6 +585,16 @@ var _ = AfterSuite(func() {
 
 func end_to_end_setup() {
 	testhelper.AssertQueryRuns(restoreConn, "DROP SCHEMA IF EXISTS schema2 CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+
+	// Try to drop some objects that test failures might leave lying around
+	// We can't use AssertQueryRuns since if an object doesn't exist it will error out, and these objects don't have IF EXISTS as an option
+	backupConn.Exec("DROP ROLE testrole; DROP ROLE global_role; DROP RESOURCE QUEUE test_queue; DROP RESOURCE GROUP rg_test_group; DROP TABLESPACE test_tablespace;")
+	restoreConn.Exec("DROP ROLE testrole; DROP ROLE global_role; DROP RESOURCE QUEUE test_queue; DROP RESOURCE GROUP rg_test_group; DROP TABLESPACE test_tablespace;")
+	if backupConn.Version.AtLeast("6") {
+		backupConn.Exec("DROP FOREIGN DATA WRAPPER fdw CASCADE;")
+		restoreConn.Exec("DROP FOREIGN DATA WRAPPER fdw CASCADE;")
+	}
+
 	publicSchemaTupleCounts = map[string]int{
 		"public.foo":   40000,
 		"public.holds": 50000,
