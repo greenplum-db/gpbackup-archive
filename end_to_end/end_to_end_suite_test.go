@@ -594,6 +594,13 @@ func end_to_end_setup() {
 		backupConn.Exec("DROP FOREIGN DATA WRAPPER fdw CASCADE;")
 		restoreConn.Exec("DROP FOREIGN DATA WRAPPER fdw CASCADE;")
 	}
+	// The gp_toolkit extension should be created automatically, but in some cases it either isn't
+	// being created or is being dropped, so for now we explicitly create it to avoid spurious failures.
+	// TODO: Track down the cause of the issue so we don't need to manually create it.
+	if backupConn.Version.AtLeast("7") {
+		backupConn.Exec("CREATE EXTENSION gp_toolkit;")
+		restoreConn.Exec("CREATE EXTENSION gp_toolkit;")
+	}
 
 	publicSchemaTupleCounts = map[string]int{
 		"public.foo":   40000,
