@@ -890,9 +890,11 @@ LANGUAGE SQL`)
 			plperlDef := backup.Extension{Oid: 0, Name: "plperl", Schema: "pg_catalog"}
 			for _, result := range results {
 				if result.Name == "plperl" {
-					structmatcher.ExpectStructsToMatchExcluding(&plperlDef, &results[0], "Oid")
+					structmatcher.ExpectStructsToMatchExcluding(&plperlDef, result, "Oid")
+					return
 				}
 			}
+			Fail("PLPerl extension not found in list")
 		})
 	})
 	Describe("GetProceduralLanguages", func() {
