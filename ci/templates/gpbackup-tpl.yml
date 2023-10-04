@@ -1951,6 +1951,9 @@ jobs:
       - put: final_published_file_gppkg_gp5_rhel6
         params:
           file: workspace/files-to-upload/greenplum_backup_restore-*-gp5-rhel6-x86_64.gppkg
+      - put: final_published_file_tar_rhel9
+        params:
+          file: workspace/files-to-upload/greenplum_backup_restore-*-rhel9.tar.gz
       - put: final_published_file_tar_rhel8
         params:
           file: workspace/files-to-upload/greenplum_backup_restore-*-rhel8.tar.gz
