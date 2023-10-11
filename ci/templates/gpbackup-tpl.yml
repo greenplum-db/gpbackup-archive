@@ -1926,7 +1926,7 @@ jobs:
       - components_untarred_rhel6/output/gpbackup_binaries_rhel6.tar.gz
       - components_untarred_rhel7/output/gpbackup_binaries_rhel7.tar.gz
       - components_untarred_rhel8/output/gpbackup_binaries_rhel8.tar.gz
-      - components_untarred_rhel8/output/gpbackup_binaries_rhel9.tar.gz
+      - components_untarred_rhel9/output/gpbackup_binaries_rhel9.tar.gz
       - components_untarred_ubuntu/output/gpbackup_binaries_ubuntu.tar.gz
 
 
