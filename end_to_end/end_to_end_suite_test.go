@@ -2141,26 +2141,26 @@ LANGUAGE plpgsql NO SQL;`)
 			if useOldBackupVersion {
 				Skip("This test is only needed for GPDB7")
 			}
-			testhelper.AssertQueryRuns(backupConn, `create type digit as enum ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');`);
-																						 // non-troublesome hashed partitioning
+			testhelper.AssertQueryRuns(backupConn, `create type digit as enum ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');`)
+			// non-troublesome hashed partitioning
 			testhelper.AssertQueryRuns(backupConn, `create table tplain (en digit, data int unique);
 																							insert into tplain select (x%10)::text::digit, x from generate_series(1,1000) x;
 																							create table ths (mod int, data int, unique(mod, data)) partition by hash(mod);
 																							create table ths_p1 partition of ths for values with (modulus 3, remainder 0);
 																							create table ths_p2 partition of ths for values with (modulus 3, remainder 1);
 																							create table ths_p3 partition of ths for values with (modulus 3, remainder 2);
-																							insert into ths select (x%10), x from generate_series(1,1000) x;`);
-																							// dangerous hashed partitioning
+																							insert into ths select (x%10), x from generate_series(1,1000) x;`)
+			// dangerous hashed partitioning
 			testhelper.AssertQueryRuns(backupConn, `create table tht (en digit, data int, unique(en, data)) partition by hash(en);
 																							create table tht_p1 partition of tht for values with (modulus 3, remainder 0);
 																							create table tht_p2 partition of tht for values with (modulus 3, remainder 1);
 																							create table tht_p3 partition of tht for values with (modulus 3, remainder 2);
-																							insert into tht select (x%10)::text::digit, x from generate_series(1,1000) x;`);
+																							insert into tht select (x%10)::text::digit, x from generate_series(1,1000) x;`)
 
-			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tplain");
-			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE ths");
-			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tht");
-			defer testhelper.AssertQueryRuns(backupConn, "DROP TYPE digit");
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tplain")
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE ths")
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tht")
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TYPE digit")
 
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
