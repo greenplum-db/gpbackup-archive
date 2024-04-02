@@ -2299,11 +2299,9 @@ LANGUAGE plpgsql NO SQL;`)
 					}
 				}
 			},
-			// Currently, the 9-segment tests are hanging due to the same pipe-related CI issues mentioned above.
-			// These tests can be un-pended when that is solved; in the meantime, the 7-segment tests give us larger-to-smaller restore coverage.
-			PEntry("Can backup a 9-segment cluster and restore to current cluster", "20220909090738", "", "9-segment-db", false, false, false, false),
-			PEntry("Can backup a 9-segment cluster and restore to current cluster with single data file", "20220909090827", "", "9-segment-db-single-data-file", false, false, true, false),
-			PEntry("Can backup a 9-segment cluster and restore to current cluster with incremental backups", "20220909150254", "20220909150353", "9-segment-db-incremental", true, false, false, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster", "20220909090738", "", "9-segment-db", false, false, false, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster with single data file", "20220909090827", "", "9-segment-db-single-data-file", false, false, true, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster with incremental backups", "20220909150254", "20220909150353", "9-segment-db-incremental", true, false, false, false),
 
 			Entry("Can backup a 7-segment cluster and restore to current cluster", "20220908145504", "", "7-segment-db", false, false, false, false),
 			Entry("Can backup a 7-segment cluster and restore to current cluster single data file", "20220912101931", "", "7-segment-db-single-data-file", false, false, true, false),
@@ -2422,6 +2420,36 @@ LANGUAGE plpgsql NO SQL;`)
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(fmt.Sprintf("Cannot restore a backup taken on a cluster with 5 segments to a cluster with %d segments unless the --resize-cluster flag is used.", segmentCount)))
+		})
+		It("Can backup 7-segment cluster and continue to resize restore to current cluster if table already exists with incompatible column type", func() {
+			if segmentCount != 3 {
+				Skip("Single data file resize restores currently require a 3-segment cluster to test.")
+			}
+
+			fullTimestamp := "20220912101931"
+			tarBaseName := "7-segment-db-single-data-file"
+			extractDirectory := extractSavedTarFile(backupDir, tarBaseName)
+			isMultiNode := (backupCluster.GetHostForContent(0) != backupCluster.GetHostForContent(-1))
+			moveSegmentBackupFiles(tarBaseName, extractDirectory, isMultiNode, fullTimestamp)
+
+			testhelper.AssertQueryRuns(restoreConn, "CREATE SCHEMA schemaone;")
+			testhelper.AssertQueryRuns(restoreConn, "CREATE TABLE schemaone.tabletwo(i date, t text);")
+			defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schemaone CASCADE;`)
+			defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schematwo CASCADE;`)
+			defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schemathree CASCADE;`)
+
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", fullTimestamp,
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, tarBaseName),
+				"--resize-cluster",
+				"--on-error-continue")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring("Encountered 1 errors during metadata restore"))
+			Expect(string(output)).To(ContainSubstring("Error loading data into table schemaone.tabletwo"))
+			Expect(string(output)).To(ContainSubstring("Encountered 1 error(s) during table data restore"))
+			Expect(string(output)).To(ContainSubstring("Data restore completed with failures"))
 		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
