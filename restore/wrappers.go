@@ -231,8 +231,8 @@ func RecoverMetadataFilesUsingPlugin() {
 	for _, fpInfo := range fpInfoList {
 		pluginConfig.MustRestoreFile(fpInfo.GetTOCFilePath())
 		if backupConfig.SingleDataFile {
-			origSize, destSize, isResizeRestore := GetResizeClusterInfo()
-			pluginConfig.RestoreSegmentTOCs(globalCluster, fpInfo, isResizeRestore, origSize, destSize)
+			origSize, destSize, _, batches := GetResizeClusterInfo()
+			pluginConfig.RestoreSegmentTOCs(globalCluster, fpInfo, origSize, destSize, batches)
 		}
 	}
 }
@@ -408,10 +408,4 @@ func GetExistingSchemas() ([]string, error) {
 
 	err := connectionPool.Select(&existingSchemas, query)
 	return existingSchemas, err
-}
-
-func TruncateTable(tableFQN string, whichConn int) error {
-	gplog.Verbose("Truncating table %s prior to restoring data", tableFQN)
-	_, err := connectionPool.Exec(`TRUNCATE `+tableFQN, whichConn)
-	return err
 }

@@ -95,6 +95,11 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
+type oidWithBatch struct {
+	oid   int
+	batch int
+}
+
 func doRestoreAgent() error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
@@ -105,11 +110,10 @@ func doRestoreAgent() error {
 
 	var bytesRead int64
 	var lastError error
-	var replicatedTables map[int]bool
 
 	readers := make(map[int]*RestoreReader)
 
-	oidList, err := getOidListFromFile(*oidFile)
+	oidWithBatchList, err := getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
 		return err
 	}
@@ -123,6 +127,19 @@ func doRestoreAgent() error {
 		// If dest doesn't divide evenly into orig, there's one more incomplete batch
 		if *origSize%*destSize != 0 {
 			batches += 1
+		}
+	}
+
+	// With the change to make oidlist include batch numbers we need to pull
+	// them out. We also need to remove duplicate oids.
+	var oidList []int
+	var prevOid int
+	for _, v := range oidWithBatchList {
+		if v.oid == prevOid {
+			continue
+		} else {
+			oidList = append(oidList, v.oid)
+			prevOid = v.oid
 		}
 	}
 
@@ -156,39 +173,29 @@ func doRestoreAgent() error {
 		}
 	}
 
-	if *isResizeRestore && batches > 1 && utils.FileExists(*replicationFile) {
-		// in the case of a larger to smaller restore, note all replicated tables
-		// so that they do not get restored to the same segment multiple times
-
-		// if no replicated tables were present in toc, the file is not written so
-		// this step is skipped
-		replicatedOidList, err := getOidListFromFile(*replicationFile)
-		if err != nil {
-			return err
-		}
-
-		replicatedTables = make(map[int]bool, len(replicatedOidList))
-		for _, oid := range replicatedOidList {
-			replicatedTables[oid] = true
-		}
-	}
-
-	preloadCreatedPipes(oidList, *copyQueue)
+	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
-	for i, oid := range oidList {
+	for i, oidWithBatch := range oidWithBatchList {
+		tableOid := oidWithBatch.oid
+		batchNum := oidWithBatch.batch
+
+		contentToRestore := *content + (*destSize * batchNum)
 		if wasTerminated {
 			logError("Terminated due to user request")
 			return errors.New("Terminated due to user request")
 		}
 
-		currentPipe = fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
-		if i < len(oidList)-*copyQueue {
-			nextPipeToCreate := fmt.Sprintf("%s_%d", *pipeFile, oidList[i+*copyQueue])
-			log(fmt.Sprintf("Oid %d: Creating pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
+		currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
+		if i < len(oidWithBatchList)-*copyQueue {
+			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
+			nextOid := nextOidWithBatch.oid
+			nextBatchNum := nextOidWithBatch.batch
+			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
+			log(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 			err := createPipe(nextPipeToCreate)
 			if err != nil {
-				logError(fmt.Sprintf("Oid %d: Failed to create pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
+				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 				// In the case this error is hit it means we have lost the
 				// ability to create pipes normally, so hard quit even if
 				// --on-error-continue is given
@@ -196,182 +203,149 @@ func doRestoreAgent() error {
 			}
 		}
 
-		// The pipe creation queue goes before the below loop because that still happens just once per table;
-		// the LoopEnd block goes after it because we're re-using the same pipes for each table.
+		if *singleDataFile {
+			start[contentToRestore] = tocEntries[contentToRestore][uint(tableOid)].StartByte
+			end[contentToRestore] = tocEntries[contentToRestore][uint(tableOid)].EndByte
+		} else if *isResizeRestore {
+			if contentToRestore < *origSize {
+				// We can only pass one filename to the helper, so we still pass in the single-data-file-style
+				// filename in a non-SDF resize case, then add the oid manually and set up the reader for that.
+				filename := constructSingleTableFilename(*dataFile, contentToRestore, tableOid)
 
-		contentToRestore := *content
-
-		for b := 0; b < batches; b++ {
-			if replicatedTables != nil {
-				tableIsNotYetRestored, tableIsPresent := replicatedTables[oid]
-				if tableIsPresent && tableIsNotYetRestored {
-					// this is the first batch encountering this replicated table.
-					// restore it and mark it for no further restoration
-					replicatedTables[oid] = false
-				} else if !tableIsNotYetRestored {
-					// table was already restored to this segment in a previous batch
-					continue
-				}
-			}
-			if *singleDataFile {
-				start[contentToRestore] = tocEntries[contentToRestore][uint(oid)].StartByte
-				end[contentToRestore] = tocEntries[contentToRestore][uint(oid)].EndByte
-			} else if *isResizeRestore {
-				if contentToRestore < *origSize {
-					// We can only pass one filename to the helper, so we still pass in the single-data-file-style
-					// filename in a non-SDF resize case, then add the oid manually and set up the reader for that.
-					filename := constructSingleTableFilename(*dataFile, contentToRestore, oid)
-
-					// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
-					// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
-					// to a map entry here intentionally.
-					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
-					if err != nil {
-						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
-						return err
-					}
-				}
-			}
-
-			log(fmt.Sprintf("Oid %d: Opening pipe %s", oid, currentPipe))
-			retries := 0
-			var elapsedWait time.Duration = 0
-			for {
-				writer, writeHandle, err = getRestorePipeWriter(currentPipe)
+				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
+				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
+				// to a map entry here intentionally.
+				readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
 				if err != nil {
-					if errors.Is(err, unix.ENXIO) {
-						// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
-						// process will get ENXIO error on its nonblocking open call on the pipe. We loop in
-						// here while looking to see if gprestore has created a skip file for this restore entry.
-						//
-						// TODO: Skip files will only be created when gprestore is run against GPDB 6+ so it
-						// might be good to have a GPDB version check here. However, the restore helper should
-						// not contain a database connection so the version should be passed through the helper
-						// invocation from gprestore (e.g. create a --db-version flag option).
-						if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, oid)) {
-							log(fmt.Sprintf("Skip file has been discovered for entry %d, skipping it", oid))
-							err = nil
-							goto LoopEnd
-						} else {
-							// keep trying to open the pipe.  If we've been trying for more than 60 seconds, log warnings
-							retries += 1
-
-							var backoff time.Duration
-							if elapsedWait > time.Duration(60)*time.Second {
-								log(fmt.Sprintf("Waiting to open writer to pipe %s because reader has not yet tried to access it. Have been waiting for: %s", currentPipe, elapsedWait))
-								backoff = time.Duration(60) * time.Second
-							} else {
-								backoff = time.Duration(math.Pow(2, float64(retries-1))) * 10 * time.Millisecond
-							}
-
-							elapsedWait += backoff
-							time.Sleep(backoff)
-						}
-					} else {
-						// In the case this error is hit it means we have lost the
-						// ability to open pipes normally, so hard quit even if
-						// --on-error-continue is given
-						logError(fmt.Sprintf("Oid %d: Pipes can no longer be created. Exiting with error: %v", oid, err))
-						return err
-					}
-				} else {
-					// A reader has connected to the pipe and we have successfully opened
-					// the writer for the pipe. To avoid having to write complex buffer
-					// logic for when os.write() returns EAGAIN due to full buffer, set
-					// the file descriptor to block on IO.
-					unix.SetNonblock(int(writeHandle.Fd()), false)
-					log(fmt.Sprintf("Oid %d: Reader connected to pipe %s", oid, path.Base(currentPipe)))
-					break
-				}
-			}
-
-			// Only position reader in case of SDF.  MDF case reads entire file, and does not need positioning.
-			// Further, in SDF case, map entries for contents that were not part of original backup will be nil,
-			// and calling methods on them errors silently.
-			if *singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
-				log(fmt.Sprintf("Oid %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", oid, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
-				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
-				if err != nil {
-					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
+					logError(fmt.Sprintf("Oid: %d, Batch %d: Error encountered getting restore data reader: %v", tableOid, batchNum, err))
 					return err
 				}
 			}
+		}
 
-			log(fmt.Sprintf("Oid %d: Start table restore", oid))
-			if *isResizeRestore {
-				if contentToRestore < *origSize {
-					if *singleDataFile {
-						bytesRead, err = readers[contentToRestore].copyData(int64(end[contentToRestore] - start[contentToRestore]))
+		log(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
+		retries := 0
+		var elapsedWait time.Duration = 0
+		for {
+			writer, writeHandle, err = getRestorePipeWriter(currentPipe)
+			if err != nil {
+				if errors.Is(err, unix.ENXIO) {
+					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
+					// process will get ENXIO error on its nonblocking open call on the pipe. We loop in
+					// here while looking to see if gprestore has created a skip file for this restore entry.
+					//
+					// TODO: Skip files will only be created when gprestore is run against GPDB 6+ so it
+					// might be good to have a GPDB version check here. However, the restore helper should
+					// not contain a database connection so the version should be passed through the helper
+					// invocation from gprestore (e.g. create a --db-version flag option).
+					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
+						log(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
+						err = nil
+						goto LoopEnd
 					} else {
-						bytesRead, err = readers[contentToRestore].copyAllData()
+						// keep trying to open the pipe.  If we've been trying for more than 60 seconds, log warnings
+						retries += 1
+
+						var backoff time.Duration
+						if elapsedWait > time.Duration(60)*time.Second {
+							log(fmt.Sprintf("Oid %d, Batch %d: Waiting to open writer to pipe %s. Reader not connected yet. Waiting for %s", tableOid, batchNum, currentPipe, elapsedWait))
+							backoff = time.Duration(60) * time.Second
+						} else {
+							backoff = time.Duration(math.Pow(2, float64(retries-1))) * 10 * time.Millisecond
+						}
+
+						elapsedWait += backoff
+						time.Sleep(backoff)
 					}
 				} else {
-					// Write "empty" data to the pipe for COPY ON SEGMENT to read.
-					bytesRead = 0
-					writer.Write([]byte{})
+					// In the case this error is hit it means we have lost the
+					// ability to open pipes normally, so hard quit even if
+					// --on-error-continue is given
+					logError(fmt.Sprintf("Oid %d, Batch %d: Pipes can no longer be created. Exiting with error: %s", tableOid, batchNum, err))
+					return err
 				}
 			} else {
-				bytesRead, err = readers[contentToRestore].copyData(int64(end[contentToRestore] - start[contentToRestore]))
+				// A reader has connected to the pipe and we have successfully opened
+				// the writer for the pipe. To avoid having to write complex buffer
+				// logic for when os.write() returns EAGAIN due to full buffer, set
+				// the file descriptor to block on IO.
+				unix.SetNonblock(int(writeHandle.Fd()), false)
+				log(fmt.Sprintf("Oid %d, Batch %d: Reader connected to pipe %s", tableOid, batchNum, path.Base(currentPipe)))
+				break
 			}
-			if err != nil {
-				// In case COPY FROM or copyN fails in the middle of a load. We
-				// need to update the lastByte with the amount of bytes that was
-				// copied before it errored out
-				if *singleDataFile {
-					lastByte[contentToRestore] += uint64(bytesRead)
-				}
-				if errBuf.Len() > 0 {
-					err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
-				} else {
-					err = errors.Wrap(err, "Error copying data")
-				}
-				goto LoopEnd
-			}
-
-			if *singleDataFile {
-				lastByte[contentToRestore] = end[contentToRestore]
-			}
-			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
-
-			log(fmt.Sprintf("Closing pipe for oid %d: %s", oid, currentPipe))
-			err = flushAndCloseRestoreWriter(currentPipe, oid)
-			if err != nil {
-				log(fmt.Sprintf("Oid %d: Failed to flush and close pipe", oid))
-				goto LoopEnd
-			}
-
-			// Recreate pipe to prevent data holdover bug
-			err = deletePipe(currentPipe)
-			if err != nil {
-				log(fmt.Sprintf("Error deleting pipe %s at end of batch loop: %v", currentPipe, err))
-				goto LoopEnd
-			}
-			err = createPipe(currentPipe)
-			if err != nil {
-				log(fmt.Sprintf("Error creating pipe %s at end of batch loop: %v", currentPipe, err))
-				goto LoopEnd
-			}
-
-			contentToRestore += *destSize
 		}
-		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
+
+		// Only position reader in case of SDF.  MDF case reads entire file, and does not need positioning.
+		// Further, in SDF case, map entries for contents that were not part of original backup will be nil,
+		// and calling methods on them errors silently.
+		if *singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+			log(fmt.Sprintf("Oid %d, Batch %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", tableOid, batchNum, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
+			err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], tableOid)
+			if err != nil {
+				logError(fmt.Sprintf("Oid %d, Batch %d: Error reading from pipe: %s", tableOid, batchNum, err))
+				return err
+			}
+		}
+
+		log(fmt.Sprintf("Oid %d, Batch %d: Start table restore", tableOid, batchNum))
+		if *isResizeRestore {
+			if contentToRestore < *origSize {
+				if *singleDataFile {
+					bytesRead, err = readers[contentToRestore].copyData(int64(end[contentToRestore] - start[contentToRestore]))
+				} else {
+					bytesRead, err = readers[contentToRestore].copyAllData()
+				}
+			} else {
+				// Write "empty" data to the pipe for COPY ON SEGMENT to read.
+				bytesRead = 0
+				writer.Write([]byte{})
+			}
+		} else {
+			bytesRead, err = readers[contentToRestore].copyData(int64(end[contentToRestore] - start[contentToRestore]))
+		}
+		if err != nil {
+			// In case COPY FROM or copyN fails in the middle of a load. We
+			// need to update the lastByte with the amount of bytes that was
+			// copied before it errored out
+			if *singleDataFile {
+				lastByte[contentToRestore] += uint64(bytesRead)
+			}
+			if errBuf.Len() > 0 {
+				err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
+			} else {
+				err = errors.Wrap(err, "Error copying data")
+			}
+			goto LoopEnd
+		}
+
+		if *singleDataFile {
+			lastByte[contentToRestore] = end[contentToRestore]
+		}
+		log(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
+
+		log(fmt.Sprintf("Closing pipe for oid %d: %s", tableOid, currentPipe))
+		err = flushAndCloseRestoreWriter(currentPipe, tableOid)
+		if err != nil {
+			log(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
+			goto LoopEnd
+		}
 
 	LoopEnd:
-		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
+		log(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
+
+		log(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
-			logError("Oid %d: Pipe remove failed with error: %v", oid, errPipe)
-			return errPipe
+			logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, currentPipe, errPipe)
 		}
 
 		if err != nil {
+			logError(fmt.Sprintf("Oid %d, Batch %d: Error encountered: %v", tableOid, batchNum, err))
 			if *onErrorContinue {
-				logError(fmt.Sprintf("Oid %d: Error encountered: %v", oid, err))
 				lastError = err
 				err = nil
 				continue
 			} else {
-				logError(fmt.Sprintf("Oid %d: Error encountered: %v", oid, err))
 				return err
 			}
 		}

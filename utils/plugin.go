@@ -434,15 +434,8 @@ func (plugin *PluginConfig) BackupSegmentTOCs(c *cluster.Cluster, fpInfo filepat
 	})
 }
 
-func (plugin *PluginConfig) RestoreSegmentTOCs(c *cluster.Cluster, fpInfo filepath.FilePathInfo, isResizeRestore bool, origSize int, destSize int) {
+func (plugin *PluginConfig) RestoreSegmentTOCs(c *cluster.Cluster, fpInfo filepath.FilePathInfo, origSize int, destSize int, batches int) {
 	var command string
-	batches := 1
-	if isResizeRestore {
-		batches = origSize / destSize
-		if origSize%destSize != 0 {
-			batches += 1
-		}
-	}
 	for b := 0; b < batches; b++ {
 		remoteOutput := c.GenerateAndExecuteCommand("Processing segment TOC files with plugin", cluster.ON_SEGMENTS, func(contentID int) string {
 			origContent := contentID + b*destSize

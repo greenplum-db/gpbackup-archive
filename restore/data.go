@@ -30,7 +30,7 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
 	customPipeThroughCommand := utils.GetPipeThroughProgram().InputCommand
-	origSize, destSize, resizeCluster := GetResizeClusterInfo()
+	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
@@ -43,62 +43,66 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
-	var numRows int64
-	var err error
-
-	// During a larger-to-smaller restore, we need multiple COPY passes to load all the data.
-	// One pass is sufficient for smaller-to-larger and normal restores.
-	batches := 1
-	if resizeCluster && origSize > destSize {
-		batches = origSize / destSize
-		if origSize%destSize != 0 {
-			batches += 1
-		}
+	if connectionPool.Version.AtLeast("7") {
+		gplog.Verbose(`Executing "%s" on coordinator`, query)
+	} else {
+		gplog.Verbose(`Executing "%s" on master`, query)
 	}
-	for i := 0; i < batches; i++ {
-		if connectionPool.Version.AtLeast("7") {
-			gplog.Verbose(`Executing "%s" on coordinator`, query)
-		} else {
-			gplog.Verbose(`Executing "%s" on master`, query)
-		}
-		result, err := connectionPool.Exec(query, whichConn)
-		if err != nil {
-			errStr := fmt.Sprintf("Error loading data into table %s", tableName)
+	result, err := connectionPool.Exec(query, whichConn)
+	if err != nil {
+		errStr := fmt.Sprintf("Error loading data into table %s", tableName)
 
-			// The COPY ON SEGMENT error might contain useful CONTEXT output
-			if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Where != "" {
-				errStr = fmt.Sprintf("%s: %s", errStr, pgErr.Where)
-			}
-
-			return 0, errors.Wrap(err, errStr)
+		// The COPY ON SEGMENT error might contain useful CONTEXT output
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Where != "" {
+			errStr = fmt.Sprintf("%s: %s", errStr, pgErr.Where)
 		}
-		rowsLoaded, _ := result.RowsAffected()
-		numRows += rowsLoaded
+
+		err = errors.Wrap(err, errStr)
+
+		return 0, err
 	}
 
-	return numRows, err
+	rowsLoaded, _ := result.RowsAffected()
+
+	return rowsLoaded, nil
 }
 
-func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
-	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
-	destinationToRead := ""
-	if backupConfig.SingleDataFile || resizeCluster {
-		destinationToRead = fmt.Sprintf("%s_%d", fpInfo.GetSegmentPipePathForCopyCommand(), entry.Oid)
-	} else {
-		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
-	}
-	gplog.Debug("Reading from %s", destinationToRead)
+func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int) error {
+	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 
-	if entry.DistByEnum {
-		gplog.Verbose("Setting gp_enable_segment_copy_checking TO off for table %s", tableName)
-		connectionPool.MustExec("SET gp_enable_segment_copy_checking TO off;", whichConn)
-		defer connectionPool.MustExec("RESET gp_enable_segment_copy_checking;", whichConn)
+	var lastErr error
+	var numRowsRestored int64
+	for i := 0; i < batches; i++ {
+		destinationToRead := ""
+		if backupConfig.SingleDataFile || resizeCluster {
+			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(), entry.Oid, i)
+		} else {
+			destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
+		}
+		gplog.Debug("Reading from %s", destinationToRead)
+
+		if entry.DistByEnum {
+			gplog.Verbose("Setting gp_enable_segment_copy_checking TO off for table %s", tableName)
+			connectionPool.MustExec("SET gp_enable_segment_copy_checking TO off;", whichConn)
+			defer connectionPool.MustExec("RESET gp_enable_segment_copy_checking;", whichConn)
+		}
+
+		partialRowsRestored, err := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+		if err != nil {
+			gplog.Error(err.Error())
+			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+				lastErr = err
+				err = nil
+				continue
+			}
+			return err
+		}
+		numRowsRestored += partialRowsRestored
+	}
+	if lastErr != nil {
+		return lastErr
 	}
 
-	numRowsRestored, err := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
-	if err != nil {
-		return err
-	}
 	numRowsBackedUp := entry.RowsCopied
 
 	// For replicated tables, we don't restore second and subsequent batches of data in the larger-to-smaller case,
@@ -109,24 +113,28 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 		numRowsRestored /= int64(destSize)
 	}
 
-	err = CheckRowsRestored(numRowsRestored, numRowsBackedUp, tableName)
+	err := CheckRowsRestored(numRowsRestored, numRowsBackedUp, tableName)
 	if err != nil {
+		gplog.Error(err.Error())
 		return err
 	}
 
 	if resizeCluster || entry.DistByEnum {
 		// replicated tables cannot be redistributed, so instead expand them if needed
 		if entry.IsReplicated && (origSize < destSize) {
-			err = ExpandReplicatedTable(origSize, tableName, whichConn)
+			err := ExpandReplicatedTable(origSize, tableName, whichConn)
+			if err != nil {
+				gplog.Error(err.Error())
+			}
 		} else {
-			err = RedistributeTableData(tableName, whichConn)
-		}
-		if err != nil {
-			return err
+			err := RedistributeTableData(tableName, whichConn)
+			if err != nil {
+				gplog.Error(err.Error())
+			}
 		}
 	}
 
-	return err
+	return nil
 }
 
 func ExpandReplicatedTable(origSize int, tableName string, whichConn int) error {
@@ -173,7 +181,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		return 0
 	}
 
-	origSize, destSize, resizeCluster := GetResizeClusterInfo()
+	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
 		if backupConfig.SingleDataFile {
@@ -184,19 +192,22 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		}
 		gplog.Verbose("Initializing pipes and gpbackup_helper on segments for %srestore", msg)
 		utils.VerifyHelperVersionOnSegments(version, globalCluster)
-		oidList := make([]string, totalTables)
-		replicatedOidList := make([]string, 0)
-		for i, entry := range dataEntries {
-			oidString := fmt.Sprintf("%d", entry.Oid)
-			oidList[i] = oidString
+
+		// During a larger-to-smaller restore, we need to do multiple passes of
+		// data loading so we assign the batches here.
+		oidList := make([]string, 0)
+		for _, entry := range dataEntries {
 			if entry.IsReplicated {
-				replicatedOidList = append(replicatedOidList, oidString)
+				oidList = append(oidList, fmt.Sprintf("%d,0", entry.Oid))
+				continue
+			}
+
+			for b := 0; b < batches; b++ {
+				oidList = append(oidList, fmt.Sprintf("%d,%d", entry.Oid, b))
 			}
 		}
+
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
-		if len(replicatedOidList) > 0 {
-			utils.WriteOidListToSegments(replicatedOidList, globalCluster, fpInfo, "replicated_oid")
-		}
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
 		if wasTerminated {
 			return 0
@@ -246,21 +257,17 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				// Truncate table before restore, if needed
 				var err error
 				if MustGetFlagBool(options.INCREMENTAL) || MustGetFlagBool(options.TRUNCATE_TABLE) {
-					err = TruncateTable(tableName, whichConn)
+					gplog.Verbose("Truncating table %s prior to restoring data", tableName)
+					_, err := connectionPool.Exec(`TRUNCATE `+tableName, whichConn)
+					if err != nil {
+						gplog.Error(err.Error())
+					}
 				}
 				if err == nil {
-					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn, origSize, destSize)
-
-					if gplog.GetVerbosity() > gplog.LOGINFO {
-						// No progress bar at this log level, so we note table count here
-						gplog.Verbose("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
-					} else {
-						gplog.Verbose("Restored data to table %s from file", tableName)
-					}
+					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn)
 				}
 
 				if err != nil {
-					gplog.Error(err.Error())
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
@@ -272,6 +279,13 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					mutex.Lock()
 					errorTablesData[tableName] = Empty{}
 					mutex.Unlock()
+				} else {
+					if gplog.GetVerbosity() > gplog.LOGINFO {
+						// No progress bar at this log level, so we note table count here
+						gplog.Verbose("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
+					} else {
+						gplog.Verbose("Restored data to table %s from file", tableName)
+					}
 				}
 
 				if backupConfig.SingleDataFile {
@@ -316,7 +330,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 		maxPipes = len(oidList)
 	}
 	for i := 0; i < maxPipes; i++ {
-		utils.CreateSegmentPipeOnAllHosts(oidList[i], c, fpInfo)
+		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo)
 	}
 	return maxPipes
 }

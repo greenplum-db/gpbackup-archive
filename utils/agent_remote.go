@@ -30,12 +30,25 @@ var helperMutex sync.Mutex
  * possibility that the COPY FROM commands start before gpbackup_helper is done
  * starting up and setting up the first pipe.
  */
-func CreateSegmentPipeOnAllHosts(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
+func CreateSegmentPipeOnAllHostsForBackup(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
 	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
 		pipeName := fpInfo.GetSegmentPipeFilePath(contentID)
 		pipeName = fmt.Sprintf("%s_%s", pipeName, oid)
 		gplog.Debug("Creating pipe %s", pipeName)
 		return fmt.Sprintf("mkfifo -m 0700 %s", pipeName)
+	})
+	c.CheckClusterError(remoteOutput, "Unable to create segment data pipes", func(contentID int) string {
+		return "Unable to create segment data pipe"
+	})
+}
+
+func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
+	oidWithBatch := strings.Split(oid, ",")
+	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
+		pipeName := fpInfo.GetSegmentPipeFilePath(contentID)
+		pipeName = fmt.Sprintf("%s_%s_%s", pipeName, oidWithBatch[0], oidWithBatch[1])
+		gplog.Debug("Creating pipe %s", pipeName)
+		return fmt.Sprintf("mkfifo %s", pipeName)
 	})
 	c.CheckClusterError(remoteOutput, "Unable to create segment data pipes", func(contentID int) string {
 		return "Unable to create segment data pipe"

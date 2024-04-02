@@ -20,7 +20,7 @@ func VerifyBackupDirectoriesExistOnAllHosts() {
 	_, err := globalCluster.ExecuteLocalCommand(fmt.Sprintf("test -d %s", globalFPInfo.GetDirForContent(-1)))
 	gplog.FatalOnError(err, "Backup directory %s missing or inaccessible", globalFPInfo.GetDirForContent(-1))
 	if MustGetFlagString(options.PLUGIN_CONFIG) == "" || backupConfig.SingleDataFile {
-		origSize, destSize, isResizeRestore := GetResizeClusterInfo()
+		origSize, destSize, isResizeRestore, _ := GetResizeClusterInfo()
 
 		remoteOutput := globalCluster.GenerateAndExecuteCommand("Verifying backup directories exist", cluster.ON_SEGMENTS, func(contentID int) string {
 			if isResizeRestore { // Map origin content to destination content to find where the original files have been placed
@@ -40,7 +40,7 @@ func VerifyBackupDirectoriesExistOnAllHosts() {
 func VerifyBackupFileCountOnSegments() {
 	// In the current backup directory format, all content IDs are intermingled in one directory, so we need to get a list of which contents
 	// correspond to the content ID we're going to check in order to provide a useful count to the user in the case of an error.
-	origSize, destSize, isResizeRestore := GetResizeClusterInfo()
+	origSize, destSize, isResizeRestore, _ := GetResizeClusterInfo()
 	contentMap := make(map[int][]string, destSize) // []string instead of []int so we can join them later
 	for i := 0; i < origSize; i++ {
 		contentMap[i%destSize] = append(contentMap[i%destSize], fmt.Sprintf("%d", i))
@@ -108,12 +108,22 @@ func VerifyMetadataFilePaths(withStats bool) {
 	}
 }
 
-func GetResizeClusterInfo() (int, int, bool) {
+func GetResizeClusterInfo() (int, int, bool, int) {
 	isResizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 	origSize := backupConfig.SegmentCount
 	destSize := len(globalCluster.ContentIDs) - 1
 	if !isResizeCluster && origSize == 0 { // Backup taken with version <1.26, no SegmentCount stored
 		origSize = destSize
 	}
-	return origSize, destSize, isResizeCluster
+
+	batches := 1
+	if isResizeCluster && origSize > destSize {
+		batches = origSize / destSize
+		// If dest doesn't divide evenly into orig, there's one more incomplete batch
+		if origSize%destSize != 0 {
+			batches += 1
+		}
+	}
+
+	return origSize, destSize, isResizeCluster, batches
 }

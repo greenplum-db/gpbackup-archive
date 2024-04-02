@@ -637,7 +637,7 @@ func DoTeardown() {
 			return
 		}
 		reportFilename := globalFPInfo.GetRestoreReportFilePath(restoreStartTime)
-		origSize, destSize, _ := GetResizeClusterInfo()
+		origSize, destSize, _, _ := GetResizeClusterInfo()
 		report.WriteRestoreReportFile(reportFilename, globalFPInfo.Timestamp, restoreStartTime, connectionPool, version, origSize, destSize, errMsg)
 		report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gprestore", !restoreFailed, backupConfig.DatabaseName)
 		if pluginConfig != nil {

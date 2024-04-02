@@ -32,7 +32,7 @@ func doBackupAgent() error {
 		return err
 	}
 
-	preloadCreatedPipes(oidList, *copyQueue)
+	preloadCreatedPipesForBackup(oidList, *copyQueue)
 	var currentPipe string
 	/*
 	 * It is important that we create the reader before creating the writer

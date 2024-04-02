@@ -191,11 +191,36 @@ func deletePipe(pipe string) error {
 }
 
 // Gpbackup creates the first n pipes. Record these pipes.
-func preloadCreatedPipes(oidList []int, queuedPipeCount int) {
+func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
 	for i := 0; i < queuedPipeCount; i++ {
 		pipeName := fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
 		pipesMap[pipeName] = true
 	}
+}
+
+func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
+	for i := 0; i < queuedPipeCount; i++ {
+		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
+		pipesMap[pipeName] = true
+	}
+}
+
+func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+	oidStr, err := operating.System.ReadFile(oidFileName)
+	if err != nil {
+		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
+		return nil, err
+	}
+	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
+	oidList := make([]oidWithBatch, len(oidStrList))
+	for i, entry := range oidStrList {
+		oidWithBatchEntry := strings.Split(entry, ",")
+		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
+		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
+
+		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
+	}
+	return oidList, nil
 }
 
 func getOidListFromFile(oidFileName string) ([]int, error) {
