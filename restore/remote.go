@@ -2,6 +2,7 @@ package restore
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -51,7 +52,12 @@ func VerifyBackupFileCountOnSegments() {
 		// so we explicitly look for filenames in the segment filename format.  In a smaller-to-larger restore, the contents list for a segment
 		// outside the destination array will be "[]", which the find command can handle safely in this context.
 		contentsList := fmt.Sprintf("(%s)", strings.Join(contentMap[contentID], "|"))
-		cmdString := fmt.Sprintf(`find %s -type f -regextype posix-extended -regex ".*gpbackup_%s_%s.*" | wc -l`, globalFPInfo.GetDirForContent(contentID), contentsList, globalFPInfo.Timestamp)
+		var cmdString string
+		if runtime.GOOS == "linux" {
+			cmdString = fmt.Sprintf(`find %s -type f -regextype posix-extended -regex ".*gpbackup_%s_%s.*" | wc -l`, globalFPInfo.GetDirForContent(contentID), contentsList, globalFPInfo.Timestamp)
+		} else if runtime.GOOS == "darwin" {
+			cmdString = fmt.Sprintf(`find -E %s -type f -regex ".*gpbackup_%s_%s.*" | wc -l`, globalFPInfo.GetDirForContent(contentID), contentsList, globalFPInfo.Timestamp)
+		}
 		return cmdString
 	})
 	globalCluster.CheckClusterError(remoteOutput, "Could not verify backup file count", func(contentID int) string {
