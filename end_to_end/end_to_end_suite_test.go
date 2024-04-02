@@ -2037,10 +2037,6 @@ LANGUAGE plpgsql NO SQL;`)
 	Describe("Properly handles enum type as distribution or partition key", func() {
 		BeforeEach(func() {
 			testutils.SkipIfBefore6(backupConn)
-			// FIXME: Enable GP7 tests once enum PR is merged to gpdb main
-			if backupConn.Version.Is("7") {
-				Skip("Distributed/partition by enum is not supported in GPDB7")
-			}
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
@@ -2144,9 +2140,6 @@ LANGUAGE plpgsql NO SQL;`)
 		It("Restores table data partitioned using GPDB7 partition syntax", func() {
 			// This test is borrowed from pg_dump
 			testutils.SkipIfBefore7(backupConn)
-			if useOldBackupVersion {
-				Skip("This test is only needed for GPDB7")
-			}
 			testhelper.AssertQueryRuns(backupConn, `create type digit as enum ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');`)
 			// non-troublesome hashed partitioning
 			testhelper.AssertQueryRuns(backupConn, `create table tplain (en digit, data int unique);
@@ -2163,10 +2156,10 @@ LANGUAGE plpgsql NO SQL;`)
 																							create table tht_p3 partition of tht for values with (modulus 3, remainder 2);
 																							insert into tht select (x%10)::text::digit, x from generate_series(1,1000) x;`)
 
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TYPE digit")
 			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tplain")
 			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE ths")
 			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE tht")
-			defer testhelper.AssertQueryRuns(backupConn, "DROP TYPE digit")
 
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
