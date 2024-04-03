@@ -44,6 +44,7 @@ var (
  * NONSEEKABLE type applies for every other restore scenario
  */
 type RestoreReader struct {
+	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
 	readerType ReaderType
@@ -212,6 +213,11 @@ func doRestoreAgent() error {
 				// filename in a non-SDF resize case, then add the oid manually and set up the reader for that.
 				filename := constructSingleTableFilename(*dataFile, contentToRestore, tableOid)
 
+				// Close file before it gets overwritten. Free up these
+				// resources when the reader is not needed anymore.
+				if reader, ok := readers[contentToRestore]; ok {
+					reader.fileHandle.Close()
+				}
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 				// to a map entry here intentionally.
@@ -390,11 +396,14 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	} else {
 		if *isFiltered && !strings.HasSuffix(fileToRead, ".gz") && !strings.HasSuffix(fileToRead, ".zst") {
 			// Seekable reader if backup is not compressed and filters are set
-			seekHandle, err = os.Open(fileToRead)
+			restoreReader.fileHandle, err = os.Open(fileToRead)
+			seekHandle = restoreReader.fileHandle
 			restoreReader.readerType = SEEKABLE
+
 		} else {
 			// Regular reader which doesn't support seek
-			readHandle, err = os.Open(fileToRead)
+			restoreReader.fileHandle, err = os.Open(fileToRead)
+			readHandle = restoreReader.fileHandle
 			restoreReader.readerType = NONSEEKABLE
 		}
 	}
