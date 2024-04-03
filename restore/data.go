@@ -91,6 +91,10 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 		if err != nil {
 			gplog.Error(err.Error())
 			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+				if connectionPool.Version.AtLeast("6") && backupConfig.SingleDataFile {
+					// inform segment helpers to skip this entry
+					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
+				}
 				lastErr = err
 				err = nil
 				continue
@@ -272,9 +276,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						return
-					} else if connectionPool.Version.AtLeast("6") && backupConfig.SingleDataFile {
-						// inform segment helpers to skip this entry
-						utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
 					}
 					mutex.Lock()
 					errorTablesData[tableName] = Empty{}
