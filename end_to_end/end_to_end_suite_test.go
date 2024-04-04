@@ -2176,7 +2176,7 @@ LANGUAGE plpgsql NO SQL;`)
 				"tplain": 1000, "ths": 1000, "tht": 1000})
 		})
 	})
-	Describe("Restore to a different-sized cluster", FlakeAttempts(5), func() {
+	Describe("Restore to a different-sized cluster", func() {
 		if useOldBackupVersion {
 			Skip("This test is not needed for old backup versions")
 		}
