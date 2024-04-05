@@ -298,7 +298,6 @@ func doRestoreAgent() error {
 			} else {
 				// Write "empty" data to the pipe for COPY ON SEGMENT to read.
 				bytesRead = 0
-				writer.Write([]byte{})
 			}
 		} else {
 			bytesRead, err = readers[contentToRestore].copyData(int64(end[contentToRestore] - start[contentToRestore]))
@@ -323,14 +322,13 @@ func doRestoreAgent() error {
 		}
 		log(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 
+	LoopEnd:
 		log(fmt.Sprintf("Closing pipe for oid %d: %s", tableOid, currentPipe))
 		err = flushAndCloseRestoreWriter(currentPipe, tableOid)
 		if err != nil {
 			log(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
-			goto LoopEnd
 		}
 
-	LoopEnd:
 		log(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
 		log(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))

@@ -80,8 +80,16 @@ func DoHelper() {
 	}
 	if err != nil {
 		// error logging handled in doBackupAgent and doRestoreAgent
-		handle, _ := utils.OpenFileForWrite(fmt.Sprintf("%s_error", *pipeFile))
-		_ = handle.Close()
+		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		gplog.Debug("Writing error file %s", errFile)
+		handle, err := utils.OpenFileForWrite(errFile)
+		if err != nil {
+			log("Encountered error creating error file: %v", err)
+		}
+		err = handle.Close()
+		if err != nil {
+			log("Encountered error closing error file: %v", err)
+		}
 	}
 }
 
@@ -241,6 +249,7 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 
 func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	if writer != nil {
+		writer.Write([]byte{}) // simulate writer connected in case of error
 		err := writer.Flush()
 		if err != nil {
 			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
@@ -273,8 +282,16 @@ func DoCleanup() {
 		 * success, so we create an error file and check for its presence in
 		 * gprestore after the COPYs are finished.
 		 */
-		handle, _ := utils.OpenFileForWrite(fmt.Sprintf("%s_error", *pipeFile))
-		_ = handle.Close()
+		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		gplog.Debug("Writing error file %s", errFile)
+		handle, err := utils.OpenFileForWrite(errFile)
+		if err != nil {
+			log("Encountered error creating error file: %v", err)
+		}
+		err = handle.Close()
+		if err != nil {
+			log("Encountered error closing error file: %v", err)
+		}
 	}
 	err := flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
