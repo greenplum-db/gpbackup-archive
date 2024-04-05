@@ -87,7 +87,6 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 			defer connectionPool.MustExec("RESET gp_enable_segment_copy_checking;", whichConn)
 		}
 
-		partialRowsRestored, copyErr := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
 		// In the case where an error file is found, this means that the
 		// restore_helper has encountered an error and has shutdown.
 		// If this occurs we need to error out, as subsequent COPY statements
@@ -95,11 +94,10 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 		// was expected to set up
 		if backupConfig.SingleDataFile {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-			if agentErr != nil {
-				gplog.Error(agentErr.Error())
-				return agentErr
-			}
+			gplog.FatalOnError(agentErr)
 		}
+
+		partialRowsRestored, copyErr := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
 
 		if copyErr != nil {
 			gplog.Error(copyErr.Error())
