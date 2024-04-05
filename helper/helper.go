@@ -56,7 +56,6 @@ var (
 	isResizeRestore  *bool
 	origSize         *int
 	destSize         *int
-	replicationFile  *string
 )
 
 func DoHelper() {
@@ -116,7 +115,6 @@ func InitializeGlobals() {
 	isResizeRestore = flag.Bool("resize-cluster", false, "Used with resize cluster restore.")
 	origSize = flag.Int("orig-seg-count", 0, "Used with resize restore.  Gives the segment count of the backup.")
 	destSize = flag.Int("dest-seg-count", 0, "Used with resize restore.  Gives the segment count of the current cluster.")
-	replicationFile = flag.String("replication-file", "", "Used with resize restore.  Gives the list of replicated tables.")
 
 	if *onErrorContinue && !*restoreAgent {
 		fmt.Printf("--on-error-continue flag can only be used with --restore-agent flag")
