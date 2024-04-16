@@ -462,11 +462,11 @@ func DoCleanup(backupFailed bool) {
 		if connectionPool != nil {
 			connectionPool.Close()
 		}
-		gplog.Verbose("Cleanup complete")
+		gplog.Info("Cleanup complete")
 		CleanupGroup.Done()
 	}()
 
-	gplog.Verbose("Beginning cleanup")
+	gplog.Info("Beginning cleanup")
 	if connectionPool != nil {
 		cancelBlockedQueries(globalFPInfo.Timestamp)
 	}

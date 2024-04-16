@@ -58,14 +58,14 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 			// Always hard quit if data reader has issues
 			return err
 		}
-		log(fmt.Sprintf("Oid %d: Data Reader seeked forward to %d byte offset", oid, seekPosition))
+		logVerbose(fmt.Sprintf("Oid %d: Data Reader seeked forward to %d byte offset", oid, seekPosition))
 	case NONSEEKABLE:
 		numDiscarded, err := r.bufReader.Discard(int(pos))
 		if err != nil {
 			// Always hard quit if data reader has issues
 			return err
 		}
-		log(fmt.Sprintf("Oid %d: Data Reader discarded %d bytes", oid, numDiscarded))
+		logVerbose(fmt.Sprintf("Oid %d: Data Reader discarded %d bytes", oid, numDiscarded))
 	case SUBSET:
 		// Do nothing as the stream is pre filtered
 	}
@@ -168,7 +168,7 @@ func doRestoreAgent() error {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
-			log(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
+			logVerbose(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
 
 			contentToRestore += *destSize
 		}
@@ -193,7 +193,7 @@ func doRestoreAgent() error {
 			nextOid := nextOidWithBatch.oid
 			nextBatchNum := nextOidWithBatch.batch
 			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-			log(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 			err := createPipe(nextPipeToCreate)
 			if err != nil {
 				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
@@ -229,7 +229,7 @@ func doRestoreAgent() error {
 			}
 		}
 
-		log(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
+		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
 		retries := 0
 		var elapsedWait time.Duration = 0
 		for {
@@ -245,7 +245,7 @@ func doRestoreAgent() error {
 					// not contain a database connection so the version should be passed through the helper
 					// invocation from gprestore (e.g. create a --db-version flag option).
 					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
-						log(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
+						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						goto LoopEnd
 					} else {
@@ -254,7 +254,7 @@ func doRestoreAgent() error {
 
 						var backoff time.Duration
 						if elapsedWait > time.Duration(60)*time.Second {
-							log(fmt.Sprintf("Oid %d, Batch %d: Waiting to open writer to pipe %s. Reader not connected yet. Waiting for %s", tableOid, batchNum, currentPipe, elapsedWait))
+							logVerbose(fmt.Sprintf("Oid %d, Batch %d: Waiting to open writer to pipe %s. Reader not connected yet. Waiting for %s", tableOid, batchNum, currentPipe, elapsedWait))
 							backoff = time.Duration(60) * time.Second
 						} else {
 							backoff = time.Duration(math.Pow(2, float64(retries-1))) * 10 * time.Millisecond
@@ -276,7 +276,7 @@ func doRestoreAgent() error {
 				// logic for when os.write() returns EAGAIN due to full buffer, set
 				// the file descriptor to block on IO.
 				unix.SetNonblock(int(writeHandle.Fd()), false)
-				log(fmt.Sprintf("Oid %d, Batch %d: Reader connected to pipe %s", tableOid, batchNum, path.Base(currentPipe)))
+				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Reader connected to pipe %s", tableOid, batchNum, path.Base(currentPipe)))
 				break
 			}
 		}
@@ -285,7 +285,7 @@ func doRestoreAgent() error {
 		// Further, in SDF case, map entries for contents that were not part of original backup will be nil,
 		// and calling methods on them errors silently.
 		if *singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
-			log(fmt.Sprintf("Oid %d, Batch %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", tableOid, batchNum, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", tableOid, batchNum, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
 			err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], tableOid)
 			if err != nil {
 				logError(fmt.Sprintf("Oid %d, Batch %d: Error reading from pipe: %s", tableOid, batchNum, err))
@@ -293,7 +293,7 @@ func doRestoreAgent() error {
 			}
 		}
 
-		log(fmt.Sprintf("Oid %d, Batch %d: Start table restore", tableOid, batchNum))
+		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Start table restore", tableOid, batchNum))
 		if *isResizeRestore {
 			if contentToRestore < *origSize {
 				if *singleDataFile {
@@ -326,18 +326,18 @@ func doRestoreAgent() error {
 		if *singleDataFile {
 			lastByte[contentToRestore] = end[contentToRestore]
 		}
-		log(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
+		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 
 	LoopEnd:
-		log(fmt.Sprintf("Closing pipe for oid %d: %s", tableOid, currentPipe))
+		logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, currentPipe))
 		err = flushAndCloseRestoreWriter(currentPipe, tableOid)
 		if err != nil {
-			log(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
 		}
 
-		log(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
+		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
-		log(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
+		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
 			logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, currentPipe, errPipe)
@@ -485,7 +485,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	} else {
 		cmdStr = fmt.Sprintf("%s restore_data %s %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath, fileToRead)
 	}
-	log(cmdStr)
+	logVerbose(cmdStr)
 	cmd := exec.Command("bash", "-c", cmdStr)
 
 	readHandle, err := cmd.StdoutPipe()

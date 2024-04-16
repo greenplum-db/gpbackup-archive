@@ -47,7 +47,7 @@ func doBackupAgent() error {
 		}
 		if i < len(oidList)-*copyQueue {
 			nextPipeToCreate := fmt.Sprintf("%s_%d", *pipeFile, oidList[i+*copyQueue])
-			log(fmt.Sprintf("Oid %d: Creating pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
+			logVerbose(fmt.Sprintf("Oid %d: Creating pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
 			err := createPipe(nextPipeToCreate)
 			if err != nil {
 				logError(fmt.Sprintf("Oid %d: Failed to create pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
@@ -55,7 +55,7 @@ func doBackupAgent() error {
 			}
 		}
 
-		log(fmt.Sprintf("Oid %d: Opening pipe %s", oid, currentPipe))
+		logInfo(fmt.Sprintf("Oid %d: Opening pipe %s", oid, currentPipe))
 		reader, readHandle, err := getBackupPipeReader(currentPipe)
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d: Error encountered getting backup pipe reader: %v", oid, err))
@@ -69,20 +69,20 @@ func doBackupAgent() error {
 			}
 		}
 
-		log(fmt.Sprintf("Oid %d: Backing up table with pipe %s", oid, currentPipe))
+		logInfo(fmt.Sprintf("Oid %d: Backing up table with pipe %s", oid, currentPipe))
 		numBytes, err := io.Copy(pipeWriter, reader)
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d: Error encountered copying bytes from pipeWriter to reader: %v", oid, err))
 			return errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
 		}
-		log(fmt.Sprintf("Oid %d: Read %d bytes\n", oid, numBytes))
+		logInfo(fmt.Sprintf("Oid %d: Read %d bytes\n", oid, numBytes))
 
 		lastProcessed := lastRead + uint64(numBytes)
 		tocfile.AddSegmentDataEntry(uint(oid), lastRead, lastProcessed)
 		lastRead = lastProcessed
 
 		_ = readHandle.Close()
-		log(fmt.Sprintf("Oid %d: Deleting pipe: %s\n", oid, currentPipe))
+		logInfo(fmt.Sprintf("Oid %d: Deleting pipe: %s\n", oid, currentPipe))
 		deletePipe(currentPipe)
 	}
 
@@ -95,7 +95,7 @@ func doBackupAgent() error {
 		 * finished. We then wait on the gpbackup side until one of those files is
 		 * written to verify the agent completed.
 		 */
-		log("Uploading remaining data to plugin destination")
+		logVerbose("Uploading remaining data to plugin destination")
 		err := writeCmd.Wait()
 		if err != nil {
 			logError(fmt.Sprintf("Error encountered writing either TOC file or error file: %v", err))
@@ -107,7 +107,7 @@ func doBackupAgent() error {
 		// error logging handled in util.go
 		return err
 	}
-	log("Finished writing segment TOC")
+	logVerbose("Finished writing segment TOC")
 	return nil
 }
 

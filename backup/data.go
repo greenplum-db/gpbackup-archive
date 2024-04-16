@@ -87,8 +87,16 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		columnNames = ConstructTableAttributesList(table.ColumnDefs)
 	}
 
+	workerInfo := ""
+	if gplog.GetVerbosity() >= gplog.LOGVERBOSE {
+		workerInfo = fmt.Sprintf("Worker %d: ", connNum)
+	}
 	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT IGNORE EXTERNAL PARTITIONS;", table.FQN(), columnNames, copyCommand, tableDelim)
-	gplog.Verbose("Worker %d: %s", connNum, query)
+	if connectionPool.Version.AtLeast("7") {
+		gplog.Progress(`%sExecuting "%s" on coordinator`, workerInfo, query)
+	} else {
+		gplog.Progress(`%sExecuting "%s" on master`, workerInfo, query)
+	}
 	result, err := connectionPool.Exec(query, connNum)
 	if err != nil {
 		return 0, err
@@ -99,15 +107,14 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 }
 
 func BackupSingleTableData(table Table, rowsCopiedMap map[uint32]int64, counters *BackupProgressCounters, whichConn int) error {
-	logMessage := fmt.Sprintf("Worker %d: Writing data for table %s to file", whichConn, table.FQN())
+	workerInfo := ""
+	if gplog.GetVerbosity() >= gplog.LOGVERBOSE {
+		workerInfo = fmt.Sprintf("Worker %d: ", whichConn)
+	}
+	logMessage := fmt.Sprintf("%sWriting data for table %s to file", workerInfo, table.FQN())
 	// Avoid race condition by incrementing counters in call to sprintf
 	tableCount := fmt.Sprintf(" (table %d of %d)", atomic.AddInt64(&counters.NumRegTables, 1), counters.TotalRegTables)
-	if gplog.GetVerbosity() > gplog.LOGINFO {
-		// No progress bar at this log level, so we note table count here
-		gplog.Verbose(logMessage + tableCount)
-	} else {
-		gplog.Verbose(logMessage)
-	}
+	gplog.Progress(logMessage + tableCount)
 
 	destinationToWrite := ""
 	if MustGetFlagBool(options.SINGLE_DATA_FILE) {

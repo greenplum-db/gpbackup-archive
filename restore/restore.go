@@ -706,11 +706,11 @@ func DoCleanup(restoreFailed bool) {
 		if err := recover(); err != nil {
 			gplog.Warn("Encountered error during cleanup: %+v", err)
 		}
-		gplog.Verbose("Cleanup complete")
+		gplog.Info("Cleanup complete")
 		CleanupGroup.Done()
 	}()
 
-	gplog.Verbose("Beginning cleanup")
+	gplog.Info("Beginning cleanup")
 	if backupConfig != nil && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 		fpInfoList := GetBackupFPInfoListFromRestorePlan()
 		for _, fpInfo := range fpInfoList {

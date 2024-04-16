@@ -84,11 +84,11 @@ func DoHelper() {
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
-			log("Encountered error creating error file: %v", err)
+			logVerbose("Encountered error creating error file: %v", err)
 		}
 		err = handle.Close()
 		if err != nil {
-			log("Encountered error closing error file: %v", err)
+			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
 }
@@ -258,7 +258,7 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 			return err
 		}
 		writer = nil
-		log("Oid %d: Successfully flushed pipe %s", oid, pipeName)
+		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
 	}
 	if writeHandle != nil {
 		err := writeHandle.Close()
@@ -267,7 +267,7 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 			return err
 		}
 		writeHandle = nil
-		log("Oid %d: Successfully closed pipe handle", oid)
+		logVerbose("Oid %d: Successfully closed pipe handle", oid)
 	}
 	return nil
 }
@@ -288,23 +288,23 @@ func DoCleanup() {
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
-			log("Encountered error creating error file: %v", err)
+			logVerbose("Encountered error creating error file: %v", err)
 		}
 		err = handle.Close()
 		if err != nil {
-			log("Encountered error closing error file: %v", err)
+			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
 	err := flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
-		log("Encountered error during cleanup: %v", err)
+		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
 	for pipeName, _ := range pipesMap {
-		log("Removing pipe %s", pipeName)
+		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
 		if err != nil {
-			log("Encountered error removing pipe %s: %v", pipeName, err)
+			logVerbose("Encountered error removing pipe %s: %v", pipeName, err)
 		}
 	}
 
@@ -312,13 +312,23 @@ func DoCleanup() {
 	for _, skipFile := range skipFiles {
 		err = utils.RemoveFileIfExists(skipFile)
 		if err != nil {
-			log("Encountered error during cleanup skip files: %v", err)
+			logVerbose("Encountered error during cleanup skip files: %v", err)
 		}
 	}
-	log("Cleanup complete")
+	logVerbose("Cleanup complete")
 }
 
-func log(s string, v ...interface{}) {
+func logInfo(s string, v ...interface{}) {
+	s = fmt.Sprintf("Segment %d: %s", *content, s)
+	gplog.Info(s, v...)
+}
+
+func logWarn(s string, v ...interface{}) {
+	s = fmt.Sprintf("Segment %d: %s", *content, s)
+	gplog.Warn(s, v...)
+}
+
+func logVerbose(s string, v ...interface{}) {
 	s = fmt.Sprintf("Segment %d: %s", *content, s)
 	gplog.Verbose(s, v...)
 }
