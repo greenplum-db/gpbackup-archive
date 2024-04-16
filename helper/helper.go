@@ -56,6 +56,7 @@ var (
 	isResizeRestore  *bool
 	origSize         *int
 	destSize         *int
+	verbosity        *int
 )
 
 func DoHelper() {
@@ -95,7 +96,6 @@ func DoHelper() {
 func InitializeGlobals() {
 	CleanupGroup = &sync.WaitGroup{}
 	CleanupGroup.Add(1)
-	gplog.InitializeLogging("gpbackup_helper", "")
 
 	backupAgent = flag.Bool("backup-agent", false, "Use gpbackup_helper as an agent for backup")
 	content = flag.Int("content", -2, "Content ID of the corresponding segment")
@@ -115,7 +115,13 @@ func InitializeGlobals() {
 	isResizeRestore = flag.Bool("resize-cluster", false, "Used with resize cluster restore.")
 	origSize = flag.Int("orig-seg-count", 0, "Used with resize restore.  Gives the segment count of the backup.")
 	destSize = flag.Int("dest-seg-count", 0, "Used with resize restore.  Gives the segment count of the current cluster.")
+	verbosity = flag.Int("verbosity", gplog.LOGINFO, "Log file verbosity")
 
+	flag.Parse()
+	if *printVersion {
+		fmt.Printf("gpbackup_helper version %s\n", version)
+		os.Exit(0)
+	}
 	if *onErrorContinue && !*restoreAgent {
 		fmt.Printf("--on-error-continue flag can only be used with --restore-agent flag")
 		os.Exit(1)
@@ -124,14 +130,12 @@ func InitializeGlobals() {
 		fmt.Printf("Both --orig-seg-count and --dest-seg-count must be used during a resize restore")
 		os.Exit(1)
 	}
-	flag.Parse()
-	if *printVersion {
-		fmt.Printf("gpbackup_helper version %s\n", version)
-		os.Exit(0)
-	}
 	operating.InitializeSystemFunctions()
 
 	pipesMap = make(map[string]bool, 0)
+
+	gplog.InitializeLogging("gpbackup_helper", "")
+	gplog.SetLogFileVerbosity(*verbosity)
 }
 
 func InitializeSignalHandler() {

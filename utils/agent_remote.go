@@ -142,7 +142,7 @@ func VerifyHelperVersionOnSegments(version string, c *cluster.Cluster) {
 	}
 }
 
-func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int) {
+func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int, verbosity int) {
 	// A mutex lock for cleaning up and starting gpbackup helpers prevents a
 	// race condition that causes gpbackup_helpers to be orphaned if
 	// gpbackup_helper cleanup happens before they are started.
@@ -175,14 +175,15 @@ func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, oper
 	if resizeCluster {
 		resizeStr = fmt.Sprintf(" --resize-cluster --orig-seg-count %d --dest-seg-count %d", origSize, destSize)
 	}
+
 	remoteOutput := c.GenerateAndExecuteCommand("Starting gpbackup_helper agent", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, "oid")
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, "script")
 		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
 		backupFile := fpInfo.GetTableBackupFilePath(contentID, 0, GetPipeThroughProgram().Extension, true)
-		helperCmdStr := fmt.Sprintf(`gpbackup_helper %s --toc-file %s --oid-file %s --pipe-file %s --data-file "%s" --content %d%s%s%s%s%s%s --copy-queue-size %d`,
-			operation, tocFile, oidFile, pipeFile, backupFile, contentID, pluginStr, compressStr, onErrorContinueStr, filterStr, singleDataFileStr, resizeStr, copyQueue)
+		helperCmdStr := fmt.Sprintf(`gpbackup_helper %s --toc-file %s --oid-file %s --pipe-file %s --data-file "%s" --content %d%s%s%s%s%s%s --copy-queue-size %d --verbosity %d`,
+			operation, tocFile, oidFile, pipeFile, backupFile, contentID, pluginStr, compressStr, onErrorContinueStr, filterStr, singleDataFileStr, resizeStr, copyQueue, verbosity)
 		// we run these commands in sequence to ensure that any failure is critical; the last command ensures the agent process was successfully started
 		return fmt.Sprintf(`cat << HEREDOC > %[1]s && chmod +x %[1]s && ( nohup %[1]s &> /dev/null &)
 #!/bin/bash

@@ -828,7 +828,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
 				"--data-only", "--on-error-continue",
-				"--include-table", "public.corrupt_table")
+				"--include-table", "public.corrupt_table",
+				"--verbose")
 			_, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 

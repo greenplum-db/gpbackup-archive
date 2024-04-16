@@ -53,12 +53,16 @@ func filtersEmpty(filters Filters) bool {
 }
 
 func SetLoggerVerbosity() {
+	gplog.SetLogFileVerbosity(gplog.LOGINFO)
 	if MustGetFlagBool(options.QUIET) {
 		gplog.SetVerbosity(gplog.LOGERROR)
+		gplog.SetLogFileVerbosity(gplog.LOGERROR)
 	} else if MustGetFlagBool(options.DEBUG) {
 		gplog.SetVerbosity(gplog.LOGDEBUG)
+		gplog.SetLogFileVerbosity(gplog.LOGDEBUG)
 	} else if MustGetFlagBool(options.VERBOSE) {
 		gplog.SetVerbosity(gplog.LOGVERBOSE)
+		gplog.SetLogFileVerbosity(gplog.LOGVERBOSE)
 	}
 }
 

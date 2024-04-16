@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/blang/semver"
+	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/filepath"
@@ -44,12 +45,15 @@ var _ = Describe("backup integration tests", func() {
 			origPipeThroughProgram = utils.GetPipeThroughProgram()
 
 			testhelper.AssertQueryRuns(connectionPool, `CREATE SCHEMA dataTest;`)
+			// Set to Verbose so progress bars won't show when running tests
+			gplog.SetVerbosity(gplog.LOGVERBOSE)
 		})
 		AfterEach(func() {
 			testhelper.AssertQueryRuns(connectionPool, `DROP SCHEMA dataTest CASCADE;`)
 			os.RemoveAll(fpInfo.BaseDataDir)
 			backup.SetFPInfo(origFPInfo)
 			utils.SetPipeThroughProgram(origPipeThroughProgram)
+			gplog.SetVerbosity(gplog.LOGINFO)
 		})
 		It("backs up multiple tables with valid data", FlakeAttempts(5), func() {
 

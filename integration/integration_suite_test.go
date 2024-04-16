@@ -10,6 +10,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
+	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/restore"
@@ -120,6 +121,7 @@ var _ = BeforeEach(func() {
 
 	restoreCmdFlags = pflag.NewFlagSet("gprestore", pflag.ExitOnError)
 	restore.SetCmdFlags(restoreCmdFlags)
+	gplog.SetLogFileVerbosity(gplog.LOGDEBUG)
 })
 
 var _ = AfterSuite(func() {
