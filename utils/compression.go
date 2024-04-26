@@ -6,6 +6,8 @@ var (
 	pipeThroughProgram PipeThroughProgram
 )
 
+const DefaultPipeThroughProgram = "cat -"
+
 type PipeThroughProgram struct {
 	Name          string
 	OutputCommand string
@@ -15,7 +17,7 @@ type PipeThroughProgram struct {
 
 func InitializePipeThroughParameters(compress bool, compressionType string, compressionLevel int) {
 	if !compress {
-		pipeThroughProgram = PipeThroughProgram{Name: "cat", OutputCommand: "cat -", InputCommand: "cat -", Extension: ""}
+		pipeThroughProgram = PipeThroughProgram{Name: "cat", OutputCommand: DefaultPipeThroughProgram, InputCommand: DefaultPipeThroughProgram, Extension: ""}
 		return
 	}
 

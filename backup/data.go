@@ -77,7 +77,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		 * of the data is backed up.
 		 */
 		checkPipeExistsCommand = fmt.Sprintf("(test -p \"%s\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToWrite, destinationToWrite)
-		customPipeThroughCommand = "cat -"
+		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		sendToDestinationCommand = fmt.Sprintf("| %s backup_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}

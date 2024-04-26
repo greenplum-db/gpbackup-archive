@@ -37,12 +37,16 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
-		customPipeThroughCommand = "cat -"
+		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
 
-	copyCommand = fmt.Sprintf("PROGRAM '%s %s | %s'", readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
+	if customPipeThroughCommand == utils.DefaultPipeThroughProgram {
+		copyCommand = fmt.Sprintf("PROGRAM '%s %s'", readFromDestinationCommand, destinationToRead)
+	} else {
+		copyCommand = fmt.Sprintf("PROGRAM '%s %s | %s'", readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
+	}
 
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
