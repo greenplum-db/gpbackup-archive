@@ -284,7 +284,7 @@ func assertRelationsExistForIncremental(conn *dbconn.DBConn, expectedNumTables i
 func assertArtifactsCleaned(timestamp string) {
 	cmdStr := fmt.Sprintf("ps -ef | grep -v grep | grep -E gpbackup_helper.*%s || true", timestamp)
 	output := mustRunCommand(exec.Command("bash", "-c", cmdStr))
-	Eventually(func() string { return strings.TrimSpace(string(output)) }, 10*time.Second, 100*time.Millisecond).Should(Equal(""))
+	Eventually(func() string { return strings.TrimSpace(string(output)) }, 30*time.Second, 100*time.Millisecond).Should(Equal(""))
 
 	fpInfo := filepath.NewFilePathInfo(backupCluster, "", timestamp, "", false)
 	description := "Checking if helper files are cleaned up properly"

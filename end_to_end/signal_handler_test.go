@@ -14,7 +14,7 @@ import (
 var _ = Describe("Signal handler tests", func() {
 	BeforeEach(func() {
 		end_to_end_setup()
-		testhelper.AssertQueryRuns(backupConn, "CREATE table bigtable(id int unique); INSERT INTO bigtable SELECT generate_series(1,1000000)")
+		testhelper.AssertQueryRuns(backupConn, "CREATE table bigtable(id int unique); INSERT INTO bigtable SELECT generate_series(1,10000000)")
 	})
 	AfterEach(func() {
 		end_to_end_teardown()
@@ -33,12 +33,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
 			output, _ := cmd.CombinedOutput()
@@ -63,12 +63,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
 			output, _ := cmd.CombinedOutput()
@@ -196,12 +196,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
 			output, _ = cmd.CombinedOutput()
@@ -228,12 +228,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
 			outputRes, _ := cmd.CombinedOutput()
@@ -257,12 +257,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
 			output, _ := cmd.CombinedOutput()
@@ -287,12 +287,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
 			output, _ := cmd.CombinedOutput()
@@ -419,12 +419,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
 			outputRes, _ := cmd.CombinedOutput()
@@ -451,12 +451,12 @@ var _ = Describe("Signal handler tests", func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 2.0s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1500)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
 			outputRes, _ := cmd.CombinedOutput()
