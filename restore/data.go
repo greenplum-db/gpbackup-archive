@@ -79,6 +79,10 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 
 	var lastErr error
 	var numRowsRestored int64
+	// We don't want duplicate data for replicated tables so only do one batch
+	if entry.IsReplicated {
+		batches = 1
+	}
 	for i := 0; i < batches; i++ {
 		destinationToRead := ""
 		if backupConfig.SingleDataFile || resizeCluster {
