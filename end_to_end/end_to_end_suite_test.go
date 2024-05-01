@@ -293,9 +293,8 @@ func assertArtifactsCleaned(timestamp string) {
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, "oid")
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, "script")
 		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
-		replicatedOidFile := fpInfo.GetSegmentHelperFilePath(contentID, "replicated_oid")
 
-		return fmt.Sprintf("! ls %s && ! ls %s && ! ls %s && ! ls %s && ! ls %s*", errorFile, oidFile, scriptFile, pipeFile, replicatedOidFile)
+		return fmt.Sprintf("! ls %s && ! ls %s && ! ls %s && ! ls %s*", errorFile, oidFile, scriptFile, pipeFile)
 	}
 	remoteOutput := backupCluster.GenerateAndExecuteCommand(description, cluster.ON_SEGMENTS|cluster.INCLUDE_COORDINATOR, cleanupFunc)
 	if remoteOutput.NumErrors != 0 {
@@ -308,7 +307,6 @@ func assertHelperCleanupLogged(stdout ...string) {
 	for _, out := range stdout {
 		Expect(out).To(ContainSubstring("Checking for leftover COPY sessions"))
 		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper files on segments"))
-		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper data pipes"))
 		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper processes"))
 		Expect(out).To(ContainSubstring("Checking whether segment agents had errors"))
 		Expect(out).To(ContainSubstring("Cleanup complete"))

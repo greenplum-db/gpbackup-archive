@@ -476,12 +476,11 @@ func DoCleanup(backupFailed bool) {
 		// This results in the DoCleanup function passed to the signal handler to never return, blocking the os.Exit call
 
 		// All COPY commands should end on their own for a successful restore, however we cleanup any hanging COPY sessions here as a precaution
-		utils.TerminateHangingCopySessions(globalFPInfo, fmt.Sprintf("gpbackup_%s", globalFPInfo.Timestamp), cleanupTimeout, 5 * time.Second)
+		utils.TerminateHangingCopySessions(globalFPInfo, fmt.Sprintf("gpbackup_%s", globalFPInfo.Timestamp), cleanupTimeout, 5*time.Second)
 
 		// Ensure we don't leave anything behind on the segments
 		utils.CleanUpSegmentHelperProcesses(globalCluster, globalFPInfo, "backup", cleanupTimeout)
 		utils.CleanUpHelperFilesOnAllHosts(globalCluster, globalFPInfo, cleanupTimeout)
-		utils.CleanUpPipesOnAllHosts(globalCluster, globalFPInfo, cleanupTimeout)
 
 		// Check gpbackup_helper errors here if backup was terminated
 		if wasTerminated {

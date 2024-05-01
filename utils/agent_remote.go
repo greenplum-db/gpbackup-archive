@@ -200,14 +200,14 @@ HEREDOC
 	})
 }
 
-func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, fileType string, contentID int) string {
+func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, contentID int) string {
 	var cmdString string
 	if runtime.GOOS == "linux" {
-		cmdString = fmt.Sprintf(`find %s -type %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
-			c.GetDirForContent(contentID), fileType, contentID, fpInfo.Timestamp, fpInfo.PID)
+		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
+			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	} else if runtime.GOOS == "darwin" {
-		cmdString = fmt.Sprintf(`find -E %s -type %s -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
-			c.GetDirForContent(contentID), fileType, contentID, fpInfo.Timestamp, fpInfo.PID)
+		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
+			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	}
 	return cmdString
 }
@@ -215,7 +215,7 @@ func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, fileType s
 func GetHelperFileCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
 	totalFiles := 0
 	remoteOutput := c.GenerateAndExecuteCommand("Checking for leftover gpbackup_helper files on segments", cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, "f", contentID), "| wc -l")
+		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, contentID), "| wc -l")
 	})
 
 	if remoteOutput.NumErrors > 0 {
@@ -231,18 +231,18 @@ func GetHelperFileCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
 	return totalFiles
 }
 
-// Removes all gpbackup_helper files from the segment data directories.
+// Removes all gpbackup_helper files and pipes from the segment data directories.
 // It's expected that gpbackup_helper cleans up the files on exit, but that is not guaranteed,
 // so this function is used to clean up any leftover files.
 func RemoveHelperFiles(c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
 	remoteOutput := c.GenerateAndExecuteCommand("Removing gpbackup_helper files from segment data directories", cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, "f", contentID), `-exec rm -f {} \;`)
+		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, contentID), `-exec rm -f {} \;`)
 	})
 
 	errMsg := fmt.Sprintf("Unable to remove gpbackup_helper file(s). See %s for a complete list of segments with errors and remove manually.",
 		gplog.GetLogFilePath())
 	c.CheckClusterError(remoteOutput, errMsg, func(contentID int) string {
-		return fmt.Sprintf("Unable to remove gpbackup_helper file(s)\n\t%s", findCommandStr(c, fpInfo, "f", contentID))
+		return fmt.Sprintf("Unable to remove gpbackup_helper file(s)\n\t%s", findCommandStr(c, fpInfo, contentID))
 	}, true)
 }
 
@@ -262,58 +262,6 @@ func CleanUpHelperFilesOnAllHosts(c *cluster.Cluster, fpInfo filepath.FilePathIn
 			RemoveHelperFiles(c, fpInfo)
 		case <-time.After(timeout):
 			gplog.Warn("Timeout of %ds reached while waiting for %d gpbackup_helper file(s) to be removed.", int(timeout.Seconds()), fileCount)
-			return
-		}
-	}
-}
-
-func GetHelperPipeCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
-	totalPipes := 0
-	remoteOutput := c.GenerateAndExecuteCommand("Checking for leftover gpbackup_helper data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, "p", contentID), "| wc -l")
-	})
-	for contentID, cmd := range remoteOutput.Commands {
-		numPipes, _ := strconv.Atoi(strings.TrimSpace(cmd.Stdout))
-		if numPipes > 0 {
-			gplog.Debug("Found %d leftover segment data pipes on segment %d on host %s",
-				numPipes, contentID, c.GetHostForContent(contentID))
-			totalPipes += numPipes
-		}
-	}
-	return totalPipes
-}
-
-// Removes all gpbackup_helper pipes from the segment data directories.
-// It's expected that gpbackup_helper cleans up the pipes on exit, but that is not guaranteed,
-// so this function is used to clean up any leftover pipes.
-func RemoveHelperPipes(c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
-	remoteOutput := c.GenerateAndExecuteCommand("Removing gpbackup_helper pipes from segment data directories", cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, "p", contentID), `-exec rm -f {} \;`)
-	})
-
-	errMsg := fmt.Sprintf("Unable to remove gpbackup_helper pipe(s). See %s for a complete list of segments with errors and remove manually.",
-		gplog.GetLogFilePath())
-	c.CheckClusterError(remoteOutput, errMsg, func(contentID int) string {
-		return fmt.Sprintf("Unable to remove gpbackup_helper pipe(s)\n\t%s", findCommandStr(c, fpInfo, "p", contentID))
-	}, true)
-}
-
-func CleanUpPipesOnAllHosts(c *cluster.Cluster, fpInfo filepath.FilePathInfo, timeout time.Duration) {
-	var pipeCount int
-	helperMutex.Lock()
-	defer helperMutex.Unlock()
-	tickerCleanup := time.NewTicker(1 * time.Second)
-
-	for {
-		select {
-		case <-tickerCleanup.C:
-			pipeCount = GetHelperPipeCount(c, fpInfo)
-			if pipeCount == 0 {
-				return
-			}
-			RemoveHelperPipes(c, fpInfo)
-		case <-time.After(timeout):
-			gplog.Warn("Timeout of %ds reached while waiting for %d gpbackup_helper file(s) to be removed.", int(timeout.Seconds()), pipeCount)
 			return
 		}
 	}

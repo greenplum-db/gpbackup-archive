@@ -717,14 +717,13 @@ func DoCleanup(restoreFailed bool) {
 			// Copy sessions must be terminated before cleaning up gpbackup_helper processes to avoid a potential deadlock
 			// If the terminate query is sent via a connection with an active COPY command, and the COPY's pipe is cleaned up, the COPY query will hang.
 			// This results in the DoCleanup function passed to the signal handler to never return, blocking the os.Exit call
-			
+
 			// All COPY commands should end on their own for a successful restore, however we cleanup any hanging COPY sessions here as a precaution
-			utils.TerminateHangingCopySessions(fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime), cleanupTimeout, 5 * time.Second)
+			utils.TerminateHangingCopySessions(fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime), cleanupTimeout, 5*time.Second)
 
 			// Ensure we don't leave anything behind on the segments
 			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore", cleanupTimeout)
 			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo, cleanupTimeout)
-			utils.CleanUpPipesOnAllHosts(globalCluster, fpInfo, cleanupTimeout)
 
 			// Check gpbackup_helper errors here if restore was terminated
 			if wasTerminated {
