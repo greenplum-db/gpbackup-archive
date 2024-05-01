@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	path "path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -200,8 +201,15 @@ HEREDOC
 }
 
 func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, fileType string, contentID int) string {
-	return fmt.Sprintf(`find %s -type %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|replicated_oid|pipe)_%d.*"`,
-		c.GetDirForContent(contentID), fileType, contentID, fpInfo.Timestamp, fpInfo.PID)
+	var cmdString string
+	if runtime.GOOS == "linux" {
+		cmdString = fmt.Sprintf(`find %s -type %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
+			c.GetDirForContent(contentID), fileType, contentID, fpInfo.Timestamp, fpInfo.PID)
+	} else if runtime.GOOS == "darwin" {
+		cmdString = fmt.Sprintf(`find -E %s -type %s -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
+			c.GetDirForContent(contentID), fileType, contentID, fpInfo.Timestamp, fpInfo.PID)
+	}
+	return cmdString
 }
 
 func GetHelperFileCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
@@ -214,7 +222,7 @@ func GetHelperFileCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
 		gplog.Error("Unable to check for leftover gpbackup_helper files on segments")
 	} else {
 		for _, cmd := range remoteOutput.Commands {
-			numFiles, _ := strconv.Atoi(strings.TrimSuffix(cmd.Stdout, "\n"))
+			numFiles, _ := strconv.Atoi(strings.TrimSpace(cmd.Stdout))
 			if numFiles > 0 {
 				totalFiles = totalFiles + numFiles
 			}
@@ -265,7 +273,7 @@ func GetHelperPipeCount(c *cluster.Cluster, fpInfo filepath.FilePathInfo) int {
 		return fmt.Sprintf("%s %s", findCommandStr(c, fpInfo, "p", contentID), "| wc -l")
 	})
 	for contentID, cmd := range remoteOutput.Commands {
-		numPipes, _ := strconv.Atoi(cmd.Stdout)
+		numPipes, _ := strconv.Atoi(strings.TrimSpace(cmd.Stdout))
 		if numPipes > 0 {
 			gplog.Debug("Found %d leftover segment data pipes on segment %d on host %s",
 				numPipes, contentID, c.GetHostForContent(contentID))
@@ -303,7 +311,7 @@ func CleanUpPipesOnAllHosts(c *cluster.Cluster, fpInfo filepath.FilePathInfo, ti
 			if pipeCount == 0 {
 				return
 			}
-			RemoveHelperFiles(c, fpInfo)
+			RemoveHelperPipes(c, fpInfo)
 		case <-time.After(timeout):
 			gplog.Warn("Timeout of %ds reached while waiting for %d gpbackup_helper file(s) to be removed.", int(timeout.Seconds()), pipeCount)
 			return

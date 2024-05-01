@@ -306,6 +306,7 @@ func assertArtifactsCleaned(timestamp string) {
 // Parses slice of backup/restore output to find helper cleanup logging
 func assertHelperCleanupLogged(stdout ...string) {
 	for _, out := range stdout {
+		Expect(out).To(ContainSubstring("Checking for leftover COPY sessions"))
 		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper files on segments"))
 		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper data pipes"))
 		Expect(out).To(ContainSubstring("Checking for leftover gpbackup_helper processes"))

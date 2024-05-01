@@ -176,9 +176,8 @@ func InitializeSignalHandler(cleanupFunc func(bool), procDesc string, termFlag *
 
 // TODO: Uniquely identify COPY commands in the multiple data file case to allow terminating sessions
 func TerminateHangingCopySessions(fpInfo filepath.FilePathInfo, appName string, timeout time.Duration, interval time.Duration) {
-
-
-	var pidCol , queryCol string
+	gplog.Verbose("Checking for leftover COPY sessions")
+	var pidCol, queryCol string
 
 	termConn := dbconn.NewDBConnFromEnvironment("postgres")
 	termConn.MustConnect(1)
@@ -206,22 +205,22 @@ func TerminateHangingCopySessions(fpInfo filepath.FilePathInfo, appName string, 
 
 	countQuery := fmt.Sprintf(`SELECT
 		count(*) %s`, fromClause)
-	
+
 	// Terminate any COPY commands that are still running.
 	// Send a termination query every interval until no COPY commands are running, or timeout is reached.
 	// Check for remaining COPY commands every 20% of the interval duration.
 	for {
 		count := dbconn.MustSelectString(termConn, countQuery)
 		select {
-			case <-tickerCount.C:
-				if count == "0" {
-					return
-				}
-			case <-tickerTerminate.C:
-				termConn.MustExec(termQuery)
-			case <-time.After(timeout):
-				gplog.Warn("Timeout of %ds reached while waiting for %s COPY command(s) to complete.", timeout, count)
+		case <-tickerCount.C:
+			if count == "0" {
 				return
+			}
+		case <-tickerTerminate.C:
+			termConn.MustExec(termQuery)
+		case <-time.After(timeout):
+			gplog.Warn("Timeout of %ds reached while waiting for %s COPY command(s) to complete.", timeout, count)
+			return
 		}
 	}
 }
