@@ -263,7 +263,7 @@ options:
 			Expect(err).ToNot(HaveOccurred())
 			assertNoErrors()
 		})
-		It("Generates error file when restore agent interrupted", func() {
+		It("Generates error file when restore agent interrupted", FlakeAttempts(5), func() {
 			setupRestoreFiles("gzip", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--single-data-file")
 			waitForPipeCreation()

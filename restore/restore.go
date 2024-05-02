@@ -592,7 +592,9 @@ func DoTeardown() {
 	restoreFailed := false
 	defer func() {
 		// If the restore was terminated, the signal handler will handle cleanup
-		if !wasTerminated {
+		if wasTerminated {
+			CleanupGroup.Wait()
+		} else {
 			DoCleanup(restoreFailed)
 		}
 

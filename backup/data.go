@@ -63,6 +63,9 @@ type BackupProgressCounters struct {
 }
 
 func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
+	if wasTerminated {
+		return -1, nil
+	}
 	checkPipeExistsCommand := ""
 	customPipeThroughCommand := utils.GetPipeThroughProgram().OutputCommand
 	sendToDestinationCommand := ">"

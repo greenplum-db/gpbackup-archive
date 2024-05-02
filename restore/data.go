@@ -26,6 +26,9 @@ var (
 )
 
 func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+	if wasTerminated {
+		return -1, nil
+	}
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"

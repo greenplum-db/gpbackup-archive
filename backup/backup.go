@@ -290,6 +290,9 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 }
 
 func backupData(tables []Table) {
+	if wasTerminated {
+		return
+	}
 	if len(tables) == 0 {
 		// No incremental data changes to backup
 		gplog.Info("No tables to backup")
@@ -361,7 +364,12 @@ func backupStatistics(tables []Table) {
 func DoTeardown() {
 	backupFailed := false
 	defer func() {
-		DoCleanup(backupFailed)
+		// If the backup was terminated, the signal handler will handle cleanup
+		if wasTerminated {
+			CleanupGroup.Wait()
+		} else {
+			DoCleanup(backupFailed)
+		}
 
 		errorCode := gplog.GetErrorCode()
 		if errorCode == 0 {
