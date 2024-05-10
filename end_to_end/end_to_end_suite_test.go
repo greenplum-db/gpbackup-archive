@@ -768,7 +768,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--timestamp", "20190809230424",
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			_, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 
@@ -854,7 +855,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--timestamp", "20190809230424",
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			_, _ = gprestoreCmd.CombinedOutput()
 
 			files, _ := path.Glob(path.Join(extractDirectory, "/*-1/backups/*",
@@ -884,7 +886,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--redirect-db", "restoredb",
 				"--backup-dir", path.Join(backupDir, "corrupt-db"),
 				"--metadata-only",
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			_, _ = gprestoreCmd.CombinedOutput()
 			expectedErrorTablesMetadata = []string{
 				"public.corrupt_table", "public.good_table1", "public.good_table2"}
@@ -919,7 +922,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--timestamp", "20230727021246",
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			_, _ = gprestoreCmd.CombinedOutput()
 
 			files, _ := path.Glob(path.Join(extractDirectory, "/*-1/backups/*", "20230727021246", "*error_tables*"))
@@ -1408,7 +1412,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
 				"--report-dir", reportDir,
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			_, _ = gprestoreCmd.CombinedOutput()
 
 			// All report files should be placed in the same dir
@@ -2011,13 +2016,9 @@ LANGUAGE plpgsql NO SQL;`)
 				Expect(contents).To(ContainSubstring("CREATE OR REPLACE VIEW public.key_dependent_view AS  SELECT view_base_table.key,\n    (view_base_table.data COLLATE \"C\") AS data\n   FROM public.view_base_table\n  GROUP BY view_base_table.key;"))
 				Expect(contents).To(ContainSubstring("CREATE OR REPLACE VIEW public.key_dependent_view_no_cols AS  SELECT\n   FROM public.view_base_table\n  GROUP BY view_base_table.key\n HAVING (length((view_base_table.data)::text) > 0);"))
 
-				gprestoreArgs := []string{
-					"--timestamp", timestamp,
+				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--backup-dir", backupDir}
-				gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-				_, err := gprestoreCmd.CombinedOutput()
-				Expect(err).ToNot(HaveOccurred())
+					"--backup-dir", backupDir)
 			})
 		})
 	})
@@ -2046,13 +2047,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 			assertDataRestored(restoreConn, map[string]int{
 				"table_with_enum_distkey": 16})
 		})
@@ -2065,13 +2062,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 			assertDataRestored(restoreConn, map[string]int{
 				"table_with_multi_enum_distkey": 16})
 		})
@@ -2087,13 +2080,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 			assertDataRestored(restoreConn, map[string]int{
 				"table_with_altered_enum_distkey": 20})
 		})
@@ -2114,13 +2103,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 			assertDataRestored(restoreConn, map[string]int{
 				"table_with_enum_partkey": 20})
 		})
@@ -2151,13 +2136,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 			assertDataRestored(restoreConn, map[string]int{
 				"tplain": 1000, "ths": 1000, "tht": 1000})
 		})
@@ -2201,7 +2182,6 @@ LANGUAGE plpgsql NO SQL;`)
 				}
 
 				gprestoreArgs := []string{
-					"--timestamp", fullTimestamp,
 					"--redirect-db", "restoredb",
 					"--backup-dir", extractDirectory,
 					"--resize-cluster",
@@ -2209,9 +2189,7 @@ LANGUAGE plpgsql NO SQL;`)
 				if isFilteredRestore {
 					gprestoreArgs = append(gprestoreArgs, "--include-schema", "schematwo")
 				}
-				gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-				_, err := gprestoreCmd.CombinedOutput()
-				Expect(err).ToNot(HaveOccurred())
+				gprestore(gprestorePath, restoreHelperPath, fullTimestamp, gprestoreArgs...)
 
 				// check row counts
 				testutils.ExecuteSQLFile(restoreConn, "resources/test_rowcount_ddl.sql")
@@ -2230,23 +2208,19 @@ LANGUAGE plpgsql NO SQL;`)
 						delete(expectedRowMap, key)
 					}
 				}
-				Expect(err).To(Not(HaveOccurred()))
 				if !reflect.DeepEqual(expectedRowMap, actualRowMap) {
 					Fail(fmt.Sprintf("Expected row count map for full restore\n\n\t%v\n\nto equal\n\n\t%v\n\n", actualRowMap, expectedRowMap))
 				}
 
 				if isIncrementalRestore {
 					// restore subsequent incremental backup
-					gprestoreincrCmd := exec.Command(gprestorePath,
-						"--timestamp", incrementalTimestamp,
+					gprestore(gprestorePath, restoreHelperPath, incrementalTimestamp,
 						"--redirect-db", "restoredb",
 						"--incremental",
 						"--data-only",
 						"--backup-dir", extractDirectory,
 						"--resize-cluster",
 						"--on-error-continue")
-					_, err := gprestoreincrCmd.CombinedOutput()
-					Expect(err).ToNot(HaveOccurred())
 
 					// check row counts
 					_ = exec.Command("psql",
@@ -2256,7 +2230,6 @@ LANGUAGE plpgsql NO SQL;`)
 					expectedIncrRowMap := unMarshalRowCounts(fmt.Sprintf("resources/%d-segment-db-incremental-rowcounts.txt", segmentCount))
 					actualIncrRowMap := unMarshalRowCounts(rowcountsFilename)
 
-					Expect(err).To(Not(HaveOccurred()))
 					if !reflect.DeepEqual(expectedIncrRowMap, actualIncrRowMap) {
 						Fail(fmt.Sprintf("Expected row count map for incremental restore\n%v\nto equal\n%v\n", actualIncrRowMap, expectedIncrRowMap))
 					}
@@ -2296,7 +2269,8 @@ LANGUAGE plpgsql NO SQL;`)
 				"--redirect-db", "restoredb",
 				"--backup-dir", extractDirectory,
 				"--resize-cluster",
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("Segment count for backup with timestamp 20230516021751 is unknown, cannot restore using --resize-cluster flag."))
@@ -2320,16 +2294,11 @@ LANGUAGE plpgsql NO SQL;`)
 					isMultiNode := (backupCluster.GetHostForContent(0) != backupCluster.GetHostForContent(-1))
 					moveSegmentBackupFiles(tarBaseName, extractDirectory, isMultiNode, fullTimestamp)
 
-					gprestoreArgs := []string{
-						"--timestamp", fullTimestamp,
+					gprestore(gprestorePath, restoreHelperPath, fullTimestamp,
 						"--redirect-db", "restoredb",
 						"--backup-dir", extractDirectory,
 						"--resize-cluster",
-						"--on-error-continue"}
-
-					gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-					_, err := gprestoreCmd.CombinedOutput()
-					Expect(err).ToNot(HaveOccurred())
+						"--on-error-continue")
 
 					// check row counts on each segment and on coordinator, expecting 1 table with 100 rows, replicated across all
 					for _, seg := range backupCluster.Segments {
@@ -2366,7 +2335,8 @@ LANGUAGE plpgsql NO SQL;`)
 				"--redirect-db", "restoredb",
 				"--backup-dir", path.Join(backupDir, "5-segment-db"),
 				"--resize-cluster",
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(MatchRegexp("Segment count for backup with timestamp [0-9]+ is unknown, cannot restore using --resize-cluster flag"))
@@ -2379,7 +2349,8 @@ LANGUAGE plpgsql NO SQL;`)
 				"--timestamp", "20220415160842",
 				"--redirect-db", "restoredb",
 				"--backup-dir", path.Join(backupDir, "5-segment-db"),
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(fmt.Sprintf("Cannot restore a backup taken on a cluster with 5 segments to a cluster with %d segments unless the --resize-cluster flag is used.", segmentCount)))
@@ -2406,7 +2377,8 @@ LANGUAGE plpgsql NO SQL;`)
 				"--redirect-db", "restoredb",
 				"--backup-dir", path.Join(backupDir, tarBaseName),
 				"--resize-cluster",
-				"--on-error-continue")
+				"--on-error-continue",
+				"--verbose")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("Encountered 1 errors during metadata restore"))
@@ -2436,13 +2408,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 
 			metadataFileContents := getMetdataFileContents(backupDir, timestamp, "metadata.sql")
 
@@ -2463,13 +2431,9 @@ LANGUAGE plpgsql NO SQL;`)
 			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			timestamp := getBackupTimestamp(string(output))
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
+				"--backup-dir", backupDir)
 
 			// assert constraint names are what we expect
 			metadataFileContents := getMetdataFileContents(backupDir, timestamp, "metadata.sql")
@@ -2524,14 +2488,9 @@ LANGUAGE plpgsql NO SQL;`)
 				Expect(string(metadataFileContents)).To(ContainSubstring("ALTER TABLE testchema.multipartition ALTER PARTITION dec16 EXCHANGE PARTITION apj WITH TABLE testchema.multipartition_1_prt_dec16_2_prt_apj_ext_part_ WITHOUT VALIDATION;"))
 			}
 
-			gprestoreArgs := []string{
-				"--timestamp", timestamp,
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir}
-			gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-			_, err := gprestoreCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
-
+				"--backup-dir", backupDir)
 		})
 	})
 	Describe("Backup and restore multi-layer leaf-partition backups filtered to parent or child tables with intermediate partitions on GPDB7+", func() {
@@ -2608,13 +2567,9 @@ LANGUAGE plpgsql NO SQL;`)
 				testhelper.AssertQueryRuns(restoreConn, "CREATE SCHEMA schemaone;")
 				timestamp := getBackupTimestamp(string(output))
 
-				gprestoreArgs := []string{
-					"--timestamp", timestamp,
+				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--backup-dir", backupDir}
-				gprestoreCmd := exec.Command(gprestorePath, gprestoreArgs...)
-				_, err := gprestoreCmd.CombinedOutput()
-				Expect(err).ToNot(HaveOccurred())
+					"--backup-dir", backupDir)
 
 				tableCount := dbconn.MustSelectString(restoreConn, "SELECT count(*) FROM information_schema.tables where table_schema = 'schemaone';")
 				Expect(tableCount).To(Equal(expectedTableCount))
