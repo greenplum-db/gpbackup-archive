@@ -84,56 +84,61 @@ time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/ --create-db 
 
 echo "## Populating database for data scale test ##"
 createdb datascaledb
-for j in {1..5000}
+for j in {1..3000}
 do
   psql -d datascaledb -q -c "CREATE TABLE tbl_1k_\$j(i int) DISTRIBUTED BY (i);"
   psql -d datascaledb -q -c "INSERT INTO tbl_1k_\$j SELECT generate_series(1,1000)"
-done
-for j in {1..100}
-do
-  psql -d datascaledb -q -c "CREATE TABLE tbl_1M_\$j(i int) DISTRIBUTED BY(i);"
-  psql -d datascaledb -q -c "INSERT INTO tbl_1M_\$j SELECT generate_series(1,1000000)"
 done
 psql -d datascaledb -q -c "CREATE TABLE tbl_1B(i int) DISTRIBUTED BY(i);"
 for j in {1..1000}
 do
   psql -d datascaledb -q -c "INSERT INTO tbl_1B SELECT generate_series(1,1000000)"
 done
+### Create a partition table with varying amounts per partition to exercise writer polling for COPY to connect
+psql -d datascaledb -c "CREATE TABLE big_partition(a int, b int, c int) DISTRIBUTED BY (a) PARTITION BY RANGE (b) (START (1) END (101) EVERY (1))"
+psql -d datascaledb -c "INSERT INTO big_partition SELECT i, i, i FROM generate_series(1,100) i"
+for j in {1..20}
+do
+	psql -d datascaledb -c "INSERT INTO big_partition (SELECT * FROM big_partition)"
+done
+psql -d datascaledb -c "INSERT INTO big_partition (SELECT * FROM big_partition WHERE a % 2 = 0)"
+psql -d datascaledb -c "INSERT INTO big_partition (SELECT * FROM big_partition WHERE a % 2 = 0)"
+psql -d datascaledb -c "INSERT INTO big_partition (SELECT * FROM big_partition WHERE a % 3 = 0)"
 
 echo "## Performing backup for data scale test ##"
 ### Multiple data file test ###
-time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ | tee "\$log_file"
+time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --leaf-partition-data | tee "\$log_file"
 timestamp=\$(head -10 "\$log_file" | grep "Backup Timestamp " | grep -Eo "[[:digit:]]{14}")
 dropdb datascaledb
 echo "## Performing restore for data scale test ##"
-time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/ --create-db --jobs=4 --quiet
+time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/ --create-db --jobs=4
 rm "\$log_file"
 
 echo "## Performing backup for data scale test with zstd ##"
 ### Multiple data file test with zstd ###
-time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --compression-type zstd | tee "\$log_file"
+time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --leaf-partition-data --compression-type zstd | tee "\$log_file"
 timestamp=\$(head -10 "\$log_file" | grep "Backup Timestamp " | grep -Eo "[[:digit:]]{14}")
 dropdb datascaledb
 echo "## Performing restore for data scale test with zstd ##"
-time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/ --create-db --jobs=4 --quiet
+time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/ --create-db --jobs=4
 rm "\$log_file"
 
 echo "## Performing single-data-file backup for data scale test ##"
 ### Single data file test ###
-time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --single-data-file | tee "\$log_file"
+time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --leaf-partition-data --single-data-file | tee "\$log_file"
 timestamp=\$(head -10 "\$log_file" | grep "Backup Timestamp " | grep -Eo "[[:digit:]]{14}")
 dropdb datascaledb
 echo "## Performing single-data-file restore for data scale test ##"
-time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/  --create-db --quiet
+time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/  --create-db
 rm "\$log_file"
 
 echo "## Performing single-data-file backup for data scale test with zstd ##"
 ### Single data file test with zstd ###
-time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --single-data-file --compression-type zstd | tee "\$log_file"
+time gpbackup --dbname datascaledb --backup-dir /data/gpdata/ --leaf-partition-data --single-data-file --compression-type zstd | tee "\$log_file"
 timestamp=\$(head -10 "\$log_file" | grep "Backup Timestamp " | grep -Eo "[[:digit:]]{14}")
 dropdb datascaledb
 echo "## Performing single-data-file restore for data scale test with zstd ##"
-time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/  --create-db --quiet
+time gprestore --timestamp "\$timestamp" --backup-dir /data/gpdata/  --create-db
 dropdb datascaledb
 rm "\$log_file"
 
