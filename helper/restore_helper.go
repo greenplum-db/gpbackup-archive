@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -230,8 +229,6 @@ func doRestoreAgent() error {
 		}
 
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
-		retries := 0
-		var elapsedWait time.Duration = 0
 		for {
 			writer, writeHandle, err = getRestorePipeWriter(currentPipe)
 			if err != nil {
@@ -249,25 +246,14 @@ func doRestoreAgent() error {
 						err = nil
 						goto LoopEnd
 					} else {
-						// keep trying to open the pipe.  If we've been trying for more than 60 seconds, log warnings
-						retries += 1
-
-						var backoff time.Duration
-						if elapsedWait > time.Duration(60)*time.Second {
-							logVerbose(fmt.Sprintf("Oid %d, Batch %d: Waiting to open writer to pipe %s. Reader not connected yet. Waiting for %s", tableOid, batchNum, currentPipe, elapsedWait))
-							backoff = time.Duration(60) * time.Second
-						} else {
-							backoff = time.Duration(math.Pow(2, float64(retries-1))) * 10 * time.Millisecond
-						}
-
-						elapsedWait += backoff
-						time.Sleep(backoff)
+						// keep trying to open the pipe
+						time.Sleep(50 * time.Millisecond)
 					}
 				} else {
 					// In the case this error is hit it means we have lost the
 					// ability to open pipes normally, so hard quit even if
 					// --on-error-continue is given
-					logError(fmt.Sprintf("Oid %d, Batch %d: Pipes can no longer be created. Exiting with error: %s", tableOid, batchNum, err))
+					logError(fmt.Sprintf("Oid %d, Batch %d: Pipes can no longer be opened. Exiting with error: %s", tableOid, batchNum, err))
 					return err
 				}
 			} else {
