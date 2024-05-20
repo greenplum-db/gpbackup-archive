@@ -51,9 +51,9 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
 	if connectionPool.Version.AtLeast("7") {
-		gplog.Progress(`Executing "%s" on coordinator`, query)
+		utils.LogProgress(`Executing "%s" on coordinator`, query)
 	} else {
-		gplog.Progress(`Executing "%s" on master`, query)
+		utils.LogProgress(`Executing "%s" on master`, query)
 	}
 	result, err := connectionPool.Exec(query, whichConn)
 	if err != nil {
@@ -304,7 +304,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					errorTablesData[tableName] = Empty{}
 					mutex.Unlock()
 				} else {
-					gplog.Progress("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
+					utils.LogProgress("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
 				}
 
 				dataProgressBar.Increment()

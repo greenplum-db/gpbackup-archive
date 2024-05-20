@@ -96,9 +96,9 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 	}
 	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT IGNORE EXTERNAL PARTITIONS;", table.FQN(), columnNames, copyCommand, tableDelim)
 	if connectionPool.Version.AtLeast("7") {
-		gplog.Progress(`%sExecuting "%s" on coordinator`, workerInfo, query)
+		utils.LogProgress(`%sExecuting "%s" on coordinator`, workerInfo, query)
 	} else {
-		gplog.Progress(`%sExecuting "%s" on master`, workerInfo, query)
+		utils.LogProgress(`%sExecuting "%s" on master`, workerInfo, query)
 	}
 	result, err := connectionPool.Exec(query, connNum)
 	if err != nil {
@@ -117,7 +117,7 @@ func BackupSingleTableData(table Table, rowsCopiedMap map[uint32]int64, counters
 	logMessage := fmt.Sprintf("%sWriting data for table %s to file", workerInfo, table.FQN())
 	// Avoid race condition by incrementing counters in call to sprintf
 	tableCount := fmt.Sprintf(" (table %d of %d)", atomic.AddInt64(&counters.NumRegTables, 1), counters.TotalRegTables)
-	gplog.Progress(logMessage + tableCount)
+	utils.LogProgress(logMessage + tableCount)
 
 	destinationToWrite := ""
 	if MustGetFlagBool(options.SINGLE_DATA_FILE) {

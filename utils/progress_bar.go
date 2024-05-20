@@ -95,3 +95,7 @@ func (vpb *VerboseProgressBar) checkPercent() {
 		vpb.nextPercentToPrint += INCR_PERCENT
 	}
 }
+
+func LogProgress(s string, v ...interface{}) {
+	gplog.Custom(gplog.LOGINFO, gplog.LOGVERBOSE, s, v...)
+}
