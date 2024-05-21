@@ -334,7 +334,7 @@ func createGlobalObjects(conn *dbconn.DBConn) {
 	if conn.Version.Is("5") || conn.Version.Is("6") {
 		testhelper.AssertQueryRuns(conn, "CREATE RESOURCE GROUP test_group WITH (CPU_RATE_LIMIT=1, MEMORY_LIMIT=1);")
 	} else if conn.Version.AtLeast("7") {
-		testhelper.AssertQueryRuns(conn, "CREATE RESOURCE GROUP test_group WITH (CPU_MAX_PERCENT=1, MEMORY_LIMIT=1);")
+		testhelper.AssertQueryRuns(conn, "CREATE RESOURCE GROUP test_group WITH (CPU_MAX_PERCENT=1, MEMORY_QUOTA=1);")
 	}
 
 	testhelper.AssertQueryRuns(conn, "ALTER ROLE global_role RESOURCE GROUP test_group;")
